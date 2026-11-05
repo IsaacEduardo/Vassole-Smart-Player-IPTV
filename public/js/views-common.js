@@ -1,13 +1,17 @@
 // Partes compartilhadas pelas telas: limpeza, cartões, categorias, idiomas e versões.
-import { S, favItems, isFav, displayName, versionsOf } from './store.js';
+import { S, favItems, isFav, displayName, versionsOf, variantsOf } from './store.js';
 import { h, icon, img, choose } from './ui.js';
 import * as player from './player.js';
 import { langName, VERSION_NAMES } from './lang.js';
+import { unlock } from './pin.js';
+import { organizeCategories } from './views-cats.js';
 
 export const cleanups = [];
 export const track = (fn) => cleanups.push(fn);
 export const go = (hash) => { location.hash = hash; };
 // Element.append converte null em texto; este auxiliar descarta valores vazios.
+// Redesenha a tela atual (ex.: depois de liberar categorias com o PIN).
+export const rerenderView = () => window.dispatchEvent(new HashChangeEvent('hashchange'));
 export const add = (el, ...c) => el.append(...c.flat().filter((x) => x !== null && x !== undefined && x !== false));
 
 // Estado da TV ao vivo e do guia, mantido entre visitas às telas.
@@ -63,7 +67,7 @@ export function channelCard(it, list) {
     h('div', { class: 'cap' }, it.num ? `${it.num} · ${displayName(it)}` : displayName(it)));
 }
 
-const catName = (it) => S.data.cats[it.kind]?.find((c) => c.id === it.cat)?.name || '';
+const catName = (it) => S.data.allCats[it.kind]?.find((c) => c.id === it.cat)?.name || '';
 
 // Abre o item; se houver várias versões do título, pergunta qual antes.
 export async function openItem(it) {
@@ -115,8 +119,10 @@ export function byLang(list, lang) {
 }
 
 // Volta para "Todos" se o idioma escolhido não existe na playlist ativa (ex.: depois de trocar de playlist).
+// O mesmo vale para a categoria escolhida (que pode ter sido ocultada ou ser de outra playlist).
 export function checkLang(kind, state) {
   if (state.lang !== '__all' && !S.data.langCounts[kind]?.has(state.lang)) { state.lang = '__all'; state.cat = '__all'; }
+  if (!state.cat.startsWith('__') && !S.data.cats[kind]?.some((c) => c.id === state.cat)) state.cat = '__all';
 }
 
 const langLabel = (l) => (l ? langName(l) || l.toUpperCase() : 'Sem idioma');
@@ -147,24 +153,53 @@ export function langBar(kind, state, onPick) {
 
 // Categorias com contagem sobre a lista já filtrada por idioma (as vazias somem).
 export function catButtons(kind, state, list, onPick, extra = []) {
+  // Ao vivo, as qualidades do mesmo canal contam uma vez (como aparecem na lista).
+  const shown = kind === 'live' ? collapseVariants(list) : list;
   const counts = new Map();
-  for (const i of list) counts.set(i.cat, (counts.get(i.cat) || 0) + 1);
+  for (const i of shown) counts.set(i.cat, (counts.get(i.cat) || 0) + 1);
   const all = [
     // Em filmes e séries, "Todos" conta cartões: as versões de um título contam uma vez.
-    { id: '__all', name: 'Todos', n: kind === 'live' ? list.length : collapseVersions(list).length },
+    { id: '__all', name: 'Todos', n: kind === 'live' ? shown.length : collapseVersions(list).length },
     { id: '__fav', name: 'Favoritos', n: byLang(favItems(kind), state.lang).length },
     ...extra,
-    ...S.data.cats[kind].map((c) => ({ id: c.id, name: c.name, n: counts.get(c.id) || 0 })).filter((c) => c.n > 0),
+    ...S.data.cats[kind].map((c) => ({ id: c.id, name: c.name, n: counts.get(c.id) || 0, locked: c.locked })).filter((c) => c.n > 0 || c.locked),
   ];
   return all.map((c) => h('button', {
     class: `cat${state.cat === c.id ? ' on' : ''}`, 'data-cat': c.id,
-    onclick: (e) => { onPick(c.id, e.currentTarget); },
-  }, h('span', { class: 'cat-name' }, c.name), h('span', { class: 'cat-n' }, String(c.n))));
+    // Categoria bloqueada: pede o PIN; liberada, redesenha a tela já com os itens dela.
+    onclick: async (e) => {
+      if (c.locked) { if (await unlock()) { state.cat = c.id; rerenderView(); } return; }
+      onPick(c.id, e.currentTarget);
+    },
+  }, h('span', { class: 'cat-name' }, c.locked ? icon('lock') : null, c.name), h('span', { class: 'cat-n' }, c.locked ? '' : String(c.n))));
+}
+
+export function organizeButton(kind) {
+  return h('button', { class: 'btn sm', title: 'Ordenar, ocultar e bloquear categorias', onclick: () => organizeCategories(kind, rerenderView) }, 'Organizar');
+}
+
+// ---- Mesmo canal em várias qualidades ----
+// Primeira ocorrência de cada grupo (o cartão/linha representa o grupo).
+export function collapseVariants(list) {
+  const seen = new Set();
+  const out = [];
+  for (const it of list) {
+    if (variantsOf(it)) {
+      if (seen.has(it.qkey)) continue;
+      seen.add(it.qkey);
+    }
+    out.push(it);
+  }
+  return out;
+}
+export function variantTags(it) {
+  const g = variantsOf(it);
+  return g ? [...new Set(g.map((v) => v.qlabel || 'Padrão'))].join(' · ') : '';
 }
 
 // Canais da categoria escolhida, já filtrados pelo idioma.
 export function liveList(state) {
   if (state.cat === '__fav') return byLang(favItems('live'), state.lang);
   const list = byLang(S.data.live, state.lang);
-  return state.cat === '__all' ? list : list.filter((c) => c.cat === state.cat);
+  return collapseVariants(state.cat === '__all' ? list : list.filter((c) => c.cat === state.cat));
 }

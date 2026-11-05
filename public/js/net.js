@@ -4,7 +4,7 @@
 export function toNet(url, opts) {
   if (!opts || !opts.proxy || !/^https?:/i.test(url)) return url;
   const base = opts.base || (typeof location !== 'undefined' ? location.origin : '');
-  return `${base}/proxy?u=${encodeURIComponent(url)}${opts.ua ? `&ua=${encodeURIComponent(opts.ua)}` : ''}`;
+  return `${base}/proxy?u=${encodeURIComponent(url)}${opts.ua ? `&ua=${encodeURIComponent(opts.ua)}` : ''}${opts.ref ? `&ref=${encodeURIComponent(opts.ref)}` : ''}`;
 }
 
 export async function netFetch(url, opts, init = {}) {

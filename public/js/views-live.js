@@ -1,10 +1,10 @@
 // Tela TV ao vivo: categorias, lista de canais, prévia e guia do canal.
-import { S, onChange, isFav, toggleFav, epgFor, epgWithFallback, nowNext, displayName } from './store.js';
+import { S, onChange, isFav, toggleFav, epgFor, epgWithFallback, nowNext, displayName, sameChannel, variantsOf } from './store.js';
 import { h, icon, img, fmtClock, chunked, debounce } from './ui.js';
 import * as player from './player.js';
 import { focusEl } from './nav.js';
 import { norm } from './util.js';
-import { add, track, liveState, needPlaylist, catButtons, liveList, langBar, byLang, checkLang } from './views-common.js';
+import { add, track, liveState, needPlaylist, catButtons, liveList, langBar, byLang, checkLang, organizeButton, variantTags } from './views-common.js';
 
 export async function viewLive(root) {
   if (needPlaylist(root)) return;
@@ -33,11 +33,12 @@ export async function viewLive(root) {
   function row(ch, i) {
     const now = h('div', { class: 'ch-now' });
     const bar = h('div', { class: 'ch-bar' }, h('div'));
-    const playing = player.current()?.key === ch.key;
+    const playing = sameChannel(player.current(), ch);
+    const tags = variantTags(ch);
     const el = h('button', {
       class: `ch-row${playing ? ' playing' : ''}`, 'data-key': ch.key,
       onclick: () => {
-        if (player.isActive() && player.current()?.key === ch.key) player.toFull();
+        if (player.isActive() && sameChannel(player.current(), ch)) player.toFull();
         else player.play(ch, { mode: 'preview', mount: preview, list: current, index: i });
       },
       ondblclick: () => player.toFull(),
@@ -45,7 +46,7 @@ export async function viewLive(root) {
     },
     h('span', { class: 'ch-num' }, ch.num ? String(ch.num) : ''),
     h('span', { class: 'ch-logo' }, img(ch.logo, '')),
-    h('span', { class: 'ch-main' }, h('span', { class: 'ch-name' }, displayName(ch)), now, bar),
+    h('span', { class: 'ch-main' }, h('span', { class: 'ch-name' }, displayName(ch), tags ? h('span', { class: 'ch-q' }, tags) : null), now, bar),
     isFav(ch) ? h('span', { class: 'ch-fav' }, icon('star')) : null);
     epgFor(ch).then((progs) => {
       const { now: p } = nowNext(progs);
@@ -67,6 +68,20 @@ export async function viewLive(root) {
 
   let infoItem = null;
   const showInfoSoon = debounce((ch) => showInfo(ch), 200);
+  // Qualidades do mesmo canal: tocar uma delas e lembrar a escolha nesta sessão.
+  function variantsRow(ch) {
+    const g = variantsOf(ch);
+    if (!g) return null;
+    return h('div', { class: 'versions', 'data-group': 'variants' }, h('span', { class: 'muted small' }, 'Qualidades:'),
+      g.map((v) => h('button', {
+        class: `chip${player.current()?.key === v.key ? ' on' : ''}`, title: displayName(v),
+        onclick: () => {
+          S.variantChoice.set(ch.qkey, v.key);
+          player.play(v, { mode: 'preview', mount: preview, list: current, index: current.indexOf(ch), exact: true });
+          showInfo(ch);
+        },
+      }, v.qlabel || 'Padrão')));
+  }
   async function showInfo(ch) {
     infoItem = ch;
     const favBtn = h('button', { class: `btn sm${isFav(ch) ? ' on' : ''}`, onclick: async () => {
@@ -80,9 +95,10 @@ export async function viewLive(root) {
         h('div', null, h('h2', null, displayName(ch)), h('div', { class: 'muted' }, ch.num ? `Canal ${ch.num}` : ''))),
       h('div', { class: 'row' },
         h('button', { class: 'btn sm primary', onclick: () => {
-          if (player.current()?.key === ch.key) player.toFull();
+          if (sameChannel(player.current(), ch)) player.toFull();
           else player.play(ch, { mode: 'full', mount: preview, list: current, index: current.indexOf(ch) });
         } }, icon('full'), 'Tela cheia'), favBtn),
+      variantsRow(ch),
       h('div', { class: 'epg-list muted' }, 'Carregando guia…'));
     const progs = await epgWithFallback(ch);
     if (infoItem !== ch) return;
@@ -105,7 +121,7 @@ export async function viewLive(root) {
   q.addEventListener('input', debounce(() => { liveState.q = q.value; renderChannels(); }, 250));
 
   add(root, h('div', { class: 'with-langs' }, langs, h('div', { class: 'live' },
-    h('aside', { class: 'col' }, h('h2', { class: 'col-title' }, 'Categorias'), cats),
+    h('aside', { class: 'col' }, h('div', { class: 'col-title row' }, h('h2', null, 'Categorias'), organizeButton('live')), cats),
     h('section', { class: 'col' }, h('div', { class: 'col-title row' }, h('h2', null, 'Canais'), q), chList),
     h('aside', { class: 'col side' }, preview, info))));
   renderLangs();
@@ -114,12 +130,13 @@ export async function viewLive(root) {
 
   const cur = player.current();
   if (cur?.kind === 'live' && player.isActive()) {
-    player.play(cur, { mode: 'preview', mount: preview, list: current, index: current.findIndex((c) => c.key === cur.key) });
+    player.play(cur, { mode: 'preview', mount: preview, list: current, index: current.findIndex((c) => sameChannel(c, cur)), exact: true });
   }
   const off = onChange((what) => {
     if (what !== 'player-item') return;
-    const k = player.current()?.key;
+    const cur2 = player.current();
     chList.querySelectorAll('.ch-row.playing').forEach((r) => r.classList.remove('playing'));
+    const k = cur2 && current.find((c) => sameChannel(c, cur2))?.key;
     if (k) {
       const r = chList.querySelector(`[data-key="${CSS.escape(k)}"]`);
       if (r) { r.classList.add('playing'); if (!player.isFull()) focusEl(r); }
@@ -127,6 +144,7 @@ export async function viewLive(root) {
   });
   track(off);
   track(() => lister?.destroy());
-  const target = (cur && chList.querySelector(`[data-key="${CSS.escape(cur.key)}"]`)) || chList.querySelector('.ch-row');
+  const curRow = cur && current.find((c) => sameChannel(c, cur));
+  const target = (curRow && chList.querySelector(`[data-key="${CSS.escape(curRow.key)}"]`)) || chList.querySelector('.ch-row');
   if (target) { target.setAttribute('data-autofocus', ''); showInfo(current.find((c) => c.key === target.dataset.key)); }
 }

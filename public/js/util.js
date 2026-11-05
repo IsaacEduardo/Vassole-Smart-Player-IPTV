@@ -17,10 +17,25 @@ export function norm(s) {
 
 // Nome de canal sem marcadores comuns de qualidade, para casar com o EPG por nome.
 export function normChannel(s) {
-  return norm(s).replace(/\b(fhd|uhd|hd|sd|4k|hevc|h265|backup|alt)\b/g, ' ').replace(/\s+/g, ' ').trim();
+  return norm(s).replace(/\b(fhd|uhd|hd|sd|4k|hevc|h265|h 265|backup|alt|2160p|1080p|720p|576p|480p|full hd)\b/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-export const itemKey = (pid, kind, id) => `${pid}|${kind}|${id}`;
+// Qualidade indicada no nome do canal. rank maior = melhor imagem. HEVC/H.265 perde meio ponto:
+// a maioria dos navegadores não o reproduz. Sem indicação: rank 2 (como HD) e rótulo vazio.
+export function channelQuality(name) {
+  const s = norm(name);
+  let rank = 2;
+  let label = '';
+  if (/\b(4k|uhd|2160p?)\b/.test(s)) { rank = 4; label = '4K'; }
+  else if (/\b(fhd|1080p?|full hd)\b/.test(s)) { rank = 3; label = 'FHD'; }
+  else if (/\b(hd|720p?)\b/.test(s)) { rank = 2; label = 'HD'; }
+  else if (/\b(sd|480p?|576p?)\b/.test(s)) { rank = 1; label = 'SD'; }
+  if (/\b(hevc|h265|h 265)\b/.test(s)) { rank -= 0.5; label = label ? `${label} HEVC` : 'HEVC'; }
+  if (/\b(backup|alt)\b/.test(s)) { rank -= 0.1; label = label ? `${label} reserva` : 'Reserva'; }
+  return { rank, label };
+}
+
+export const itemKey =(pid, kind, id) => `${pid}|${kind}|${id}`;
 
 const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
 export function decodeEntities(s) {

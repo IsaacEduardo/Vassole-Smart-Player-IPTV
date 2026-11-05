@@ -84,6 +84,28 @@ const showY = bl.items.find((i) => i.kind === 'series');
 assert.equal(showY.ver, 'leg');
 assert.equal(showY.vkey, 'show y');
 
+// Cabeçalhos por canal (EXTVLCOPT, EXTHTTP, formato Kodi) e tvg-shift.
+const m3uHdr = `#EXTM3U tvg-shift="-1"
+#EXTINF:-1 tvg-shift="2",Canal VLC
+#EXTVLCOPT:http-user-agent=VLC/3.0
+#EXTVLCOPT:http-referrer=https://site.example/
+http://s/live/1.m3u8
+#EXTINF:-1,Canal HTTP
+#EXTHTTP:{"User-Agent":"Kodi/20","Referer":"https://outro.example/"}
+http://s/live/2.ts
+#EXTINF:-1,Canal Kodi
+http://s/live/3.m3u8|User-Agent=Mozilla%2F5.0&Referer=https://k.example/
+#EXTINF:-1,Canal Simples
+http://s/live/4.ts
+`;
+const bh = buildFromM3U('p3', m3uHdr).items;
+const chn = (n) => bh.find((i) => i.name === n);
+assert.deepEqual([chn('Canal VLC').ua, chn('Canal VLC').ref, chn('Canal VLC').shift], ['VLC/3.0', 'https://site.example/', 2]);
+assert.deepEqual([chn('Canal HTTP').ua, chn('Canal HTTP').ref], ['Kodi/20', 'https://outro.example/']);
+assert.deepEqual([chn('Canal Kodi').url, chn('Canal Kodi').ua, chn('Canal Kodi').ref], ['http://s/live/3.m3u8', 'Mozilla/5.0', 'https://k.example/']);
+assert.equal(chn('Canal Simples').ua, undefined, 'opções não vazam para o próximo canal');
+assert.equal(chn('Canal Simples').shift, -1, 'tvg-shift do cabeçalho');
+
 assert.deepEqual(xtreamFromUrl('http://host:8080/get.php?username=a&password=b&type=m3u_plus&output=ts'), { server: 'http://host:8080', username: 'a', password: 'b' });
 assert.equal(xtreamFromUrl('http://host/lista.m3u'), null);
 assert.equal(normalizeServer('host.tv:8080/'), 'http://host.tv:8080');

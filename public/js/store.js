@@ -1,7 +1,7 @@
 // Estado da aplicação: ajustes, playlist ativa, favoritos, histórico e guia.
 import * as db from './db.js';
 import { Xtream } from './xtream.js';
-import { itemKey, b64utf8, normChannel } from './util.js';
+import { itemKey, b64utf8, normChannel, channelQuality } from './util.js';
 
 export const DEFAULTS = {
   proxyMode: 'auto',      // auto | on | off
@@ -17,6 +17,8 @@ export const DEFAULTS = {
   langPrefs: [],          // idiomas preferidos, em ordem
   langHideOthers: false,  // esconder itens de outros idiomas (os sem idioma continuam visíveis)
   stripLangPrefix: false, // exibir "PT: SIC" como "SIC"
+  epgOffset: 0,           // ajuste manual do guia XMLTV, em horas
+  chanQuality: 'high',    // canal com várias qualidades: começa pela 'high' (maior) ou 'low' (mais leve)
   autoUpdateHours: 24,
   epgUpdateHours: 12,
   active: null,
@@ -30,6 +32,8 @@ export const S = {
   favs: new Map(),
   net: { proxy: false, ua: '' },
   proxyAvailable: false,
+  unlocked: false,        // categorias bloqueadas liberadas pelo PIN nesta sessão
+  variantChoice: new Map(), // canal com várias qualidades: a escolhida pelo usuário nesta sessão
   epgCache: new Map(),
   alias: {},
   listeners: new Set(),
@@ -87,7 +91,8 @@ export async function activate(pid) {
   const byCat = (kind) => cats.filter((c) => c.pid === pid && c.kind === kind).sort((a, b) => a.order - b.order);
   S.data = {
     all: { live, movie, series },
-    cats: { live: byCat('live'), movie: byCat('movie'), series: byCat('series') },
+    allCats: { live: byCat('live'), movie: byCat('movie'), series: byCat('series') },
+    cats: {}, variants: new Map(),
     byKey: new Map([...live, ...movie, ...series].map((i) => [i.key, i])),
     hasLang: live.some((i) => 'lang' in i) || movie.some((i) => 'lang' in i),
     langCounts: {}, versions: {},
@@ -103,19 +108,73 @@ const KINDS = ['live', 'movie', 'series'];
 
 // Listas visíveis conforme os idiomas escolhidos, contagem por idioma e grupos de versões
 // (o mesmo título dublado, legendado ou em outro idioma vira um só cartão).
+// Preferências de categoria da playlist: ocultas, bloqueadas (PIN) e ordem.
+export const catPrefs = () => S.pl?.catPrefs || { hidden: [], locked: [], order: {} };
+const catSets = () => { const p = catPrefs(); return { hidden: new Set(p.hidden), locked: new Set(p.locked) }; };
+
+// Item visível: categoria não oculta, não bloqueada (ou liberada pelo PIN) e idioma permitido.
+export function isVisible(it) {
+  if (!it) return false;
+  const { hidden, locked } = catSets();
+  const ck = `${it.kind === 'episode' ? 'series' : it.kind}|${it.cat}`;
+  if (hidden.has(ck) || (!S.unlocked && locked.has(ck))) return false;
+  const prefs = S.settings.langPrefs || [];
+  return !(S.settings.langHideOthers && prefs.length && it.lang && !prefs.includes(it.lang));
+}
+
 export function rebuildLists() {
   const D = S.data;
   if (!D) return;
   const prefs = S.settings.langPrefs || [];
-  const hide = S.settings.langHideOthers && prefs.length;
+  const hideLang = S.settings.langHideOthers && prefs.length;
+  const { hidden, locked } = catSets();
+  const order = catPrefs().order || {};
   for (const kind of KINDS) {
-    const list = hide ? D.all[kind].filter((i) => !i.lang || prefs.includes(i.lang)) : D.all[kind];
+    const blocked = (i) => hidden.has(`${kind}|${i.cat}`) || (!S.unlocked && locked.has(`${kind}|${i.cat}`));
+    const list = D.all[kind].filter((i) => !blocked(i) && !(hideLang && i.lang && !prefs.includes(i.lang)));
     D[kind] = list;
+    // Categorias: sem as ocultas, na ordem escolhida; as bloqueadas ficam marcadas.
+    const pos = new Map((order[kind] || []).map((id, n) => [id, n]));
+    D.cats[kind] = D.allCats[kind]
+      .filter((c) => !hidden.has(`${kind}|${c.id}`))
+      .map((c) => ({ ...c, locked: locked.has(`${kind}|${c.id}`) && !S.unlocked }))
+      .sort((a, b) => (pos.has(a.id) ? pos.get(a.id) : 1e6 + a.order) - (pos.has(b.id) ? pos.get(b.id) : 1e6 + b.order));
     const lc = new Map();
     for (const i of list) lc.set(i.lang || '', (lc.get(i.lang || '') || 0) + 1);
     D.langCounts[kind] = lc;
     if (kind !== 'live') D.versions[kind] = versionGroups(list);
   }
+  D.variants = variantGroups(D.live);
+}
+
+// ---- Mesmo canal em várias qualidades (SD, HD, FHD, 4K) ----
+function variantGroups(list) {
+  const by = new Map();
+  for (const i of list) {
+    const base = normChannel(i.dn || i.name);
+    if (!base) continue;
+    const q = channelQuality(i.name);
+    i.qkey = `${i.lang || ''}|${base}`;
+    i.qrank = q.rank;
+    i.qlabel = q.label;
+    const g = by.get(i.qkey);
+    if (g) g.push(i); else by.set(i.qkey, [i]);
+  }
+  const out = new Map();
+  for (const [k, g] of by) if (g.length > 1) out.set(k, g.sort((a, b) => b.qrank - a.qrank));
+  return out;
+}
+
+export const variantsOf = (it) => (it?.qkey && S.data?.variants.get(it.qkey)) || null;
+export const sameChannel = (a, b) => !!a && !!b && (a.key === b.key || (!!a.qkey && a.qkey === b.qkey && !!variantsOf(a)));
+
+// Versão do canal a tocar: a escolhida nesta sessão ou, pelo ajuste, a de maior ou menor qualidade.
+export function preferredVariant(it) {
+  const g = variantsOf(it);
+  if (!g) return it;
+  const chosen = g.find((v) => v.key === S.variantChoice.get(it.qkey));
+  if (chosen) return chosen;
+  return S.settings.chanQuality === 'low' ? g[g.length - 1] : g[0];
 }
 
 function versionGroups(list) {
@@ -165,7 +224,10 @@ export function streamUrl(item) {
 }
 
 // ---- Favoritos ----
-const snapshot = (i) => ({ kind: i.kind, id: i.id, name: i.name, logo: i.logo || '', cat: i.cat, num: i.num, ext: i.ext, url: i.url, epgId: i.epgId });
+const snapshot = (i) => ({ kind: i.kind, id: i.id, name: i.name, logo: i.logo || '', cat: i.cat, num: i.num, ext: i.ext, url: i.url, epgId: i.epgId, ua: i.ua, ref: i.ref, shift: i.shift });
+
+// Rede para tocar um item: o User-Agent e o Referer do canal (listas M3U) valem sobre o ajuste geral.
+export const itemNet = (it) => (it && (it.ua || it.ref) ? { ...S.net, ua: it.ua || S.net.ua, ref: it.ref || '' } : S.net);
 export const isFav = (item) => S.favs.has(item.key || itemKey(item.pid, item.kind, item.id));
 export async function toggleFav(item) {
   const key = item.key || itemKey(S.pl.id, item.kind, item.id);
@@ -185,7 +247,8 @@ export function favItems(kind) {
   const out = [];
   for (const f of S.favs.values()) {
     if (kind && f.item.kind !== kind) continue;
-    out.push(S.data?.byKey.get(f.key) || { ...f.item, key: f.key, pid: f.pid });
+    const it = S.data?.byKey.get(f.key) || { ...f.item, key: f.key, pid: f.pid };
+    if (isVisible(it)) out.push(it);
   }
   return out.sort((a, b) => (S.favs.get(a.key)?.added || 0) - (S.favs.get(b.key)?.added || 0));
 }
@@ -220,15 +283,19 @@ export function epgKeyFor(item) {
   if (item.epgId) return item.epgId;
   return S.alias[normChannel(item.tvgName || item.name)] || '';
 }
+// Programação XMLTV do canal, com o tvg-shift do canal e o ajuste manual dos Ajustes aplicados.
 export async function epgFor(item) {
   if (!S.pl || !item) return [];
   const ch = epgKeyFor(item);
   if (!ch) return [];
-  if (S.epgCache.has(ch)) return S.epgCache.get(ch);
+  const shift = ((Number(item.shift) || 0) + (Number(S.settings.epgOffset) || 0)) * 3600e3;
+  const ck = shift ? `${ch}|${shift}` : ch;
+  if (S.epgCache.has(ck)) return S.epgCache.get(ck);
   const rec = await db.get('epg', [S.pl.id, ch]);
-  const list = rec?.progs || [];
+  let list = rec?.progs || [];
+  if (shift) list = list.map((p) => ({ ...p, s: p.s + shift, e: p.e + shift }));
   if (S.epgCache.size > 600) S.epgCache.delete(S.epgCache.keys().next().value);
-  S.epgCache.set(ch, list);
+  S.epgCache.set(ck, list);
   return list;
 }
 

@@ -1,5 +1,7 @@
 // Telas de playlists e ajustes.
 import { S, setSetting, loadPlaylists, activate, computeNet, detectProxy, applyLangSettings } from './store.js';
+import { hasPin, setPinDialog, removePin, lockNow } from './pin.js';
+import { organizeCategories } from './views-cats.js';
 import { h, icon, ago, fmtDate, toast, modal, confirmDialog, segmented } from './ui.js';
 import { runTask, isRunning } from './tasks.js';
 import { xtreamFromUrl, normalizeServer } from './xtream.js';
@@ -277,6 +279,9 @@ export async function viewSettings(root) {
       row('Formato ao vivo (Xtream)', 'HLS (.m3u8) ou MPEG-TS (.ts). Automático usa o que a conta permite, com preferência por HLS.', segmented([
         { value: 'auto', label: 'Automático' }, { value: 'hls', label: 'HLS' }, { value: 'ts', label: 'MPEG-TS' },
       ], st.liveFormat, (v) => setSetting('liveFormat', v))),
+      row('Canais em várias qualidades', 'Quando o mesmo canal existe em SD, HD, FHD ou 4K, por qual começar. Se a versão falhar, as outras são tentadas.', segmented([
+        { value: 'high', label: 'Maior qualidade' }, { value: 'low', label: 'Mais leve' },
+      ], st.chanQuality || 'high', (v) => setSetting('chanQuality', v))),
       row('Proporção da imagem', null, segmented([
         { value: 'contain', label: 'Ajustar' }, { value: 'cover', label: 'Preencher' }, { value: 'fill', label: 'Esticar' },
       ], st.aspect, (v) => { setSetting('aspect', v); document.querySelector('#player video, .stage video')?.style.setProperty('object-fit', v); }))),
@@ -290,6 +295,13 @@ export async function viewSettings(root) {
       row('Prefixo de região nos nomes', 'Esconder mostra “PT: SIC” como “SIC”.', segmented([
         { value: false, label: 'Mostrar' }, { value: true, label: 'Esconder' },
       ], !!st.stripLangPrefix, (v) => setSetting('stripLangPrefix', v)))),
+    section('Controle parental',
+      row('PIN', hasPin() ? 'Pedido para abrir categorias bloqueadas e para organizar as categorias.' : 'Sem PIN definido. Crie um para poder bloquear categorias.', h('div', { class: 'row' },
+        h('button', { class: 'btn sm', onclick: async () => { if (await setPinDialog()) rerender(); } }, hasPin() ? 'Alterar PIN' : 'Criar PIN'),
+        hasPin() ? h('button', { class: 'btn sm', onclick: async () => { if (await removePin()) rerender(); } }, 'Remover PIN') : null,
+        hasPin() && S.unlocked ? h('button', { class: 'btn sm', onclick: () => { lockNow(); toast('Categorias bloqueadas de novo'); rerender(); } }, 'Bloquear agora') : null)),
+      row('Categorias', S.pl ? 'Ordenar, ocultar e bloquear as categorias da playlist em uso.' : 'Escolha uma playlist primeiro.', h('div', { class: 'row' },
+        ...[['live', 'TV ao vivo'], ['movie', 'Filmes'], ['series', 'Séries']].map(([k, label]) => h('button', { class: 'btn sm', disabled: !S.data, onclick: () => organizeCategories(k, rerender) }, label))))),
     section('Legendas e áudio',
       row('Tamanho da legenda', null, segmented([
         { value: 's', label: 'P' }, { value: 'm', label: 'M' }, { value: 'l', label: 'G' }, { value: 'xl', label: 'GG' },
@@ -313,6 +325,9 @@ export async function viewSettings(root) {
       row('Lista de canais', 'Ao abrir o app, se a última atualização for mais antiga que o intervalo.', segmented([
         { value: 0, label: 'Desligada' }, { value: 12, label: '12 h' }, { value: 24, label: '24 h' }, { value: 72, label: '3 dias' },
       ], st.autoUpdateHours, (v) => setSetting('autoUpdateHours', v))),
+      row('Ajuste de horário do guia', 'Corrige guias XMLTV com fuso errado. Soma-se ao tvg-shift de cada canal da lista.', segmented(
+        [-3, -2, -1, 0, 1, 2, 3].map((n) => ({ value: n, label: n === 0 ? '0' : `${n > 0 ? '+' : '−'}${Math.abs(n)} h` })),
+        Number(st.epgOffset) || 0, (v) => { setSetting('epgOffset', v); S.epgCache.clear(); })),
       row('Guia (EPG)', null, segmented([
         { value: 0, label: 'Desligada' }, { value: 6, label: '6 h' }, { value: 12, label: '12 h' }, { value: 24, label: '24 h' },
       ], st.epgUpdateHours, (v) => setSetting('epgUpdateHours', v)))),

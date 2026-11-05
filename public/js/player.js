@@ -1,13 +1,15 @@
 // Player: HLS (hls.js), MPEG-TS (mpegts.js) e reprodução nativa (MP4/WebM/MKV conforme o navegador).
-import { S, streamUrl, epgWithFallback, nowNext, saveHistory, getProgress, toggleFav, isFav, setSetting, emit, displayName } from './store.js';
+import { S, streamUrl, epgWithFallback, nowNext, saveHistory, getProgress, toggleFav, isFav, setSetting, emit, displayName, itemNet, preferredVariant, variantsOf } from './store.js';
 import { h, icon, fmtClock, fmtTime, toast, choose, loadScript } from './ui.js';
 import { toNet } from './net.js';
 import { pushScope, popScope, focusEl } from './nav.js';
 import { initTracks, onItem, clearTracks, applyPrefs, audioList, hasStreamSubs, pickAudio, pickSubs } from './subs.js';
+import { qualityAvailable, pickQuality, pickSpeed } from './player-menus.js';
 
 const P = {
   token: 0, mode: 'closed', item: null, ctx: {}, live: false, hls: null, mts: null,
   retry: 0, osdTimer: 0, lastSave: 0, home: null, num: '', numTimer: 0,
+  rate: 1, tried: new Set(), // velocidade (filmes/episódios); versões do canal já tentadas
 };
 let root; let stage; let video; let osd; let el = {};
 
@@ -28,7 +30,9 @@ export function initPlayer() {
   el.cur = h('span', { class: 't' });
   el.dur = h('span', { class: 't' });
   el.fill = h('div', { class: 'bar-fill' });
-  el.bar = h('div', { class: 'bar', onclick: (e) => {
+  // Barra de progresso: clique do mouse ou setas ←/→ com ela em foco (controle remoto).
+  el.bar = h('div', { class: 'bar', role: 'slider', tabindex: '0', 'data-f': '', 'aria-label': 'Posição', 'aria-valuemin': '0', onclick: (e) => {
+    if (e.detail === 0) return; // "clique" vindo do Enter: não há posição
     const r = e.currentTarget.getBoundingClientRect();
     if (Number.isFinite(video.duration)) video.currentTime = ((e.clientX - r.left) / r.width) * video.duration;
   } }, el.fill);
@@ -39,6 +43,15 @@ export function initPlayer() {
   el.bPlay = btn('pause', 'Reproduzir/pausar', togglePlay, 'big');
   el.bFwd = btn('fwd10', 'Avançar 10 s', () => seek(10), 'vod-only');
   el.bNext = btn('down', 'Próximo canal', () => zap(1), 'live-only');
+  const replay = (it) => play(it, { ...P.ctx, mode: P.mode === 'full' ? 'full' : 'preview', mount: P.home, exact: true });
+  el.bQuality = btn('quality', 'Qualidade', () => pickQuality(P.hls, P.item, replay));
+  el.bSpeed = btn('speed', 'Velocidade', async () => {
+    const r = await pickSpeed(P.rate);
+    if (r === undefined) return;
+    P.rate = r;
+    video.playbackRate = r;
+    toast(r === 1 ? 'Velocidade normal' : `Velocidade ${String(r).replace('.', ',')}×`);
+  }, 'vod-only');
   el.bAudio = btn('audio', 'Áudio', pickAudio);
   el.bSubs = btn('cc', 'Legendas', pickSubs);
   el.bAspect = btn('aspect', 'Proporção', cycleAspect);
@@ -60,11 +73,15 @@ export function initPlayer() {
     h('div', { class: 'osd-bottom' }, el.prog,
       h('div', { class: 'osd-ctrl' },
         h('div', { class: 'grp' }, el.bPrev, el.bBack, el.bPlay, el.bFwd, el.bNext),
-        h('div', { class: 'grp' }, el.bAudio, el.bSubs, el.bAspect, el.bFav, el.bFull, el.bClose))));
+        h('div', { class: 'grp' }, el.bQuality, el.bSpeed, el.bAudio, el.bSubs, el.bAspect, el.bFav, el.bFull, el.bClose))));
   root.append(osd, el.num);
   root.addEventListener('mousemove', () => { if (P.mode === 'full') showOsd(false); });
 
-  video.addEventListener('playing', () => { spin(false); el.err.hidden = true; P.retry = 0; updatePlayIcon(); });
+  video.addEventListener('playing', () => {
+    spin(false); el.err.hidden = true; P.retry = 0; updatePlayIcon();
+    const rate = P.live ? 1 : P.rate;
+    if (video.playbackRate !== rate) video.playbackRate = rate;
+  });
   video.addEventListener('pause', () => { updatePlayIcon(); persist(true); if (P.mode === 'full') showOsd(false); });
   video.addEventListener('waiting', () => spin(true));
   video.addEventListener('canplay', () => spin(false));
@@ -73,7 +90,7 @@ export function initPlayer() {
   video.addEventListener('error', () => {
     if (P.hls || P.mts || !P.item) return;
     const c = video.error?.code;
-    showError(c === 4 ? 'Formato ou codec não suportado por este navegador.' : c === 3 ? 'Erro ao decodificar o vídeo.' : 'Não foi possível carregar o vídeo.');
+    fail(c === 4 ? 'Formato ou codec não suportado por este navegador.' : c === 3 ? 'Erro ao decodificar o vídeo.' : 'Não foi possível carregar o vídeo.');
   });
   setInterval(() => { if (P.mode === 'full') el.clock.textContent = fmtClock(Date.now()); }, 15000);
   initTracks(video, { hls: () => P.hls, item: () => P.item, onUpdate: updateTrackButtons });
@@ -96,7 +113,16 @@ function showError(msg, clickToPlay = false) {
 function retryNow() {
   if (!P.item) return;
   el.err.hidden = true;
-  play(P.item, { ...P.ctx, resume: true });
+  play(P.item, { ...P.ctx, resume: true, exact: true });
+}
+
+// Falha definitiva: num canal com várias qualidades, tenta a próxima ainda não tentada.
+function fail(msg) {
+  const g = P.live ? variantsOf(P.item) : null;
+  const next = g && g.find((v) => !P.tried.has(v.key));
+  if (!next) { showError(msg); return; }
+  toast(`${P.item.qlabel || 'Esta versão'} não respondeu. Tentando ${next.qlabel || 'outra versão'}…`);
+  play(next, { ...P.ctx, mode: P.mode === 'full' ? 'full' : 'preview', mount: P.home, exact: true, fallback: true });
 }
 
 function teardown() {
@@ -109,7 +135,7 @@ function teardown() {
   try { video.load(); } catch { /* */ }
 }
 
-async function pickEngine(url, live) {
+async function pickEngine(url, live, net) {
   let path = url.toLowerCase();
   try { path = new URL(url).pathname.toLowerCase(); } catch { /* */ }
   if (/\.m3u8?$/.test(path)) return 'hls';
@@ -119,7 +145,7 @@ async function pickEngine(url, live) {
   const ac = new AbortController();
   const t = setTimeout(() => ac.abort(), 8000);
   try {
-    const r = await fetch(toNet(url, S.net), { signal: ac.signal, headers: { Range: 'bytes=0-2047' } });
+    const r = await fetch(toNet(url, net), { signal: ac.signal, headers: { Range: 'bytes=0-2047' } });
     const ct = r.headers.get('content-type') || '';
     const { value } = await r.body.getReader().read();
     ac.abort();
@@ -141,9 +167,10 @@ async function load(url, live, startAt, token) {
   teardown();
   spin(true);
   el.err.hidden = true;
-  const engine = await pickEngine(url, live);
+  const net = itemNet(P.item); // User-Agent/Referer do canal, quando a lista os define
+  const engine = await pickEngine(url, live, net);
   if (token !== P.token) return;
-  const src = toNet(url, S.net);
+  const src = toNet(url, net);
   P.engine = engine;
   try {
     if (engine === 'hls') {
@@ -154,7 +181,7 @@ async function load(url, live, startAt, token) {
         const hls = new Hls({ enableWorker: true, backBufferLength: live ? 10 : 60, maxBufferLength: 30, liveDurationInfinity: true, startPosition: startAt || -1 });
         P.hls = hls;
         hls.on(Hls.Events.ERROR, (_, d) => onHlsError(d, token));
-        hls.on(Hls.Events.MANIFEST_PARSED, () => tryPlay());
+        hls.on(Hls.Events.MANIFEST_PARSED, () => { tryPlay(); updateTrackButtons(); });
         const tracksChanged = () => { applyPrefs(); updateTrackButtons(); };
         hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, tracksChanged);
         hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, tracksChanged);
@@ -183,14 +210,23 @@ async function load(url, live, startAt, token) {
     if (startAt) video.addEventListener('loadedmetadata', () => { video.currentTime = startAt; }, { once: true });
     tryPlay();
   } catch (e) {
-    showError(e.message);
+    fail(e.message);
   }
 }
 
 function onHlsError(d, token) {
   if (token !== P.token || !d.fatal) return;
   const Hls = window.Hls;
-  if (d.type === Hls.ErrorTypes.NETWORK_ERROR && P.retry < 3) {
+  // Manifesto que não carregou: startLoad() não o pede de novo. Erro 4xx falha na hora (e passa
+  // para outra versão do canal); outros erros (rede, tempo esgotado) recarregam o stream uma vez.
+  if (/manifest/i.test(d.details || '')) {
+    const code = d.response?.code || 0;
+    if (!(code >= 400 && code < 500) && P.retry < 1) {
+      P.retry++;
+      setTimeout(() => { if (token === P.token) play(P.item, { ...P.ctx, resume: true, keepRetry: true, exact: true, fallback: true }); }, 1500);
+      return;
+    }
+  } else if (d.type === Hls.ErrorTypes.NETWORK_ERROR && P.retry < 3) {
     P.retry++;
     setTimeout(() => { if (token === P.token && P.hls) P.hls.startLoad(); }, 1200 * P.retry);
     return;
@@ -198,7 +234,7 @@ function onHlsError(d, token) {
   if (d.type === Hls.ErrorTypes.MEDIA_ERROR && P.retry < 2) { P.retry++; P.hls.recoverMediaError(); return; }
   const codec = /codec|incompatible/i.test(d.details || '');
   const manifest = /manifest/i.test(d.details || '');
-  showError(codec ? 'Codec não suportado por este navegador (ex.: HEVC ou AC-3).'
+  fail(codec ? 'Codec não suportado por este navegador (ex.: HEVC ou AC-3).'
     : manifest ? `O stream não respondeu (${d.response?.code || d.details}). Verifique a conta, o proxy ou o formato ao vivo nos Ajustes.`
       : `Falha na reprodução (${d.details}).`);
 }
@@ -207,15 +243,21 @@ function onMtsError(type, detail, token) {
   if (token !== P.token) return;
   if (P.retry < 2 && P.live) {
     P.retry++;
-    setTimeout(() => { if (token === P.token) play(P.item, { ...P.ctx, resume: true, keepRetry: true }); }, 1500);
+    setTimeout(() => { if (token === P.token) play(P.item, { ...P.ctx, resume: true, keepRetry: true, exact: true, fallback: true }); }, 1500);
     return;
   }
-  showError(`Falha na reprodução (${type}${detail ? `: ${detail}` : ''}).`);
+  fail(`Falha na reprodução (${type}${detail ? `: ${detail}` : ''}).`);
 }
 
 export async function play(item, ctx = {}) {
   const token = ++P.token;
   const live = item.kind === 'live';
+  const { exact, fallback, ...rest } = ctx;
+  // Canal com várias qualidades: começa pela escolhida (ou a do ajuste), salvo pedido exato.
+  if (live && !exact) item = preferredVariant(item);
+  if (!fallback) P.tried = new Set();
+  P.tried.add(item.key);
+  ctx = rest;
   let startAt = 0;
   if (!live && ctx.resume !== false) {
     const pr = await getProgress(item);
@@ -293,6 +335,7 @@ export function stop() {
   el.err.hidden = true;
   if (P.mode === 'full') popScope(scopeFn);
   P.mode = 'closed';
+  root.classList.remove('nocursor', 'osd-on');
   P.item = null;
   P.home = null;
   root.hidden = true;
@@ -305,13 +348,16 @@ function osdVisible() { return osd.classList.contains('show'); }
 function showOsd(focus) {
   osd.classList.add('show');
   root.classList.add('osd-on');
+  root.classList.remove('nocursor');
   clearTimeout(P.osdTimer);
   P.osdTimer = setTimeout(() => { if (!video.paused && el.err.hidden) hideOsd(); }, 5000);
   if (focus && !osd.contains(document.activeElement)) requestAnimationFrame(() => focusEl(el.bPlay));
 }
+// A barra some depois de 5 s sem uso; o cursor do mouse some junto.
 function hideOsd() {
   osd.classList.remove('show');
   root.classList.remove('osd-on');
+  if (P.mode === 'full') root.classList.add('nocursor');
   if (osd.contains(document.activeElement)) root.focus?.();
 }
 
@@ -341,6 +387,9 @@ function onTime() {
     el.fill.style.width = `${(video.currentTime / d) * 100}%`;
     el.cur.textContent = fmtTime(video.currentTime);
     el.dur.textContent = fmtTime(d);
+    el.bar.setAttribute('aria-valuemax', String(Math.round(d)));
+    el.bar.setAttribute('aria-valuenow', String(Math.round(video.currentTime)));
+    el.bar.setAttribute('aria-valuetext', `${fmtTime(video.currentTime)} de ${fmtTime(d)}`);
   }
   if (Date.now() - P.lastSave > 5000) persist();
 }
@@ -394,6 +443,7 @@ async function updateInfo() {
 function updateTrackButtons() {
   el.bAudio.disabled = audioList().length < 2;
   el.bSubs.disabled = !P.item || (P.item.kind === 'live' && !hasStreamSubs());
+  el.bQuality.disabled = !qualityAvailable(P.hls, P.item);
 }
 function applyAspect() { video.style.objectFit = S.settings.aspect || 'contain'; }
 function cycleAspect() {
@@ -434,6 +484,8 @@ export function onKey(k) {
     showOsd(true);
     return true;
   }
+  // Com a barra de progresso em foco, ←/→ voltam ou avançam 10 s.
+  if (document.activeElement === el.bar && (k === 'left' || k === 'right')) { seek(k === 'left' ? -10 : 10); showOsd(false); return true; }
   showOsd(false);
   return false;
 }

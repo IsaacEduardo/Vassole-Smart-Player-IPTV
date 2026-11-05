@@ -51,6 +51,9 @@ const P = {
   edit: 'M4 20h4L19 9l-4-4L4 16zM14 6l4 4',
   check: 'M5 12.5l4.5 4.5L19 7',
   info: 'M12 3a9 9 0 1 1 0 18 9 9 0 0 1 0-18zM12 11v6M12 7.5v.01',
+  lock: 'M6 11h12v9H6zM8.5 11V8a3.5 3.5 0 0 1 7 0v3',
+  quality: 'M3 6h18v12H3zM7 9.5v5M7 12h3M10 9.5v5M13.5 9.5v5h1.5a2.5 2.5 0 0 0 0-5z',
+  speed: 'M4 15a8 8 0 1 1 16 0M12 15l4-5M12 15h.01',
 };
 export function icon(name, cls = '') {
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');

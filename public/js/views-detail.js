@@ -65,7 +65,7 @@ function episodeItem(series, e, season) {
   return {
     kind: 'episode', pid, id: String(e.id), key: itemKey(pid, 'episode', e.id),
     name: `${series.name} T${season} E${num} · ${title}`,
-    title, season: Number(season), episode: num, ext: e.container_extension || e.ext || 'mp4', url: e.url,
+    title, season: Number(season), episode: num, ext: e.container_extension || e.ext || 'mp4', url: e.url, ua: e.ua, ref: e.ref,
     logo: e.info?.movie_image || e.logo || series.logo, plot: e.info?.plot || '', dur: e.info?.duration || '',
     series: { id: series.id, name: series.name, logo: series.logo },
   };

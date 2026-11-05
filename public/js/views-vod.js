@@ -2,7 +2,7 @@
 import { S, favItems, history, displayName } from './store.js';
 import { h, chunked, debounce, segmented } from './ui.js';
 import { norm } from './util.js';
-import { add, track, kindLabel, needPlaylist, catButtons, posterCard, langBar, byLang, checkLang, collapseVersions } from './views-common.js';
+import { add, track, kindLabel, needPlaylist, catButtons, posterCard, langBar, byLang, checkLang, collapseVersions, organizeButton } from './views-common.js';
 
 // Estado mantido entre visitas às telas.
 const vodState = { movie: { cat: '__all', sort: 'default', q: '', lang: '__all' }, series: { cat: '__all', sort: 'default', q: '', lang: '__all' } };
@@ -63,7 +63,7 @@ export async function viewVod(root, kind) {
   q.addEventListener('input', debounce(() => { st.q = q.value; renderGrid(); }, 250));
   scroller.append(h('div', { class: 'col-title row wrap' }, h('h2', null, kindLabel[kind]), q,
     segmented(SORTS, st.sort, (v) => { st.sort = v; renderGrid(); })), grid);
-  add(root, h('div', { class: 'with-langs' }, langs, h('div', { class: 'vod' }, h('aside', { class: 'col' }, h('h2', { class: 'col-title' }, 'Categorias'), cats), scroller)));
+  add(root, h('div', { class: 'with-langs' }, langs, h('div', { class: 'vod' }, h('aside', { class: 'col' }, h('div', { class: 'col-title row' }, h('h2', null, 'Categorias'), organizeButton(kind)), cats), scroller)));
   renderGrid();
   track(() => lister?.destroy());
   const first = grid.querySelector('.card');

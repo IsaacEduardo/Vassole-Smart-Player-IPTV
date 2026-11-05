@@ -21,10 +21,41 @@ function attrs(s) {
   return out;
 }
 
+// Cabeçalhos HTTP do canal: #EXTVLCOPT:http-user-agent=…, #EXTVLCOPT:http-referrer=…,
+// #EXTHTTP:{"User-Agent":…,"Referer":…} e o formato do Kodi "url|User-Agent=…&Referer=…".
+function vlcOpt(line, opts) {
+  const m = /^#EXTVLCOPT:\s*http-(user-agent|referr?er)\s*=\s*(.+)$/i.exec(line);
+  if (m) opts[/agent/i.test(m[1]) ? 'ua' : 'ref'] = m[2].trim();
+}
+function extHttp(line, opts) {
+  try {
+    const j = JSON.parse(line.slice(line.indexOf(':') + 1));
+    for (const [k, v] of Object.entries(j)) {
+      if (/^user-agent$/i.test(k)) opts.ua = String(v);
+      else if (/^referr?er$/i.test(k)) opts.ref = String(v);
+    }
+  } catch { /* JSON inválido: ignora */ }
+}
+export function splitKodiUrl(raw, opts = {}) {
+  const i = raw.indexOf('|');
+  if (i < 0) return raw;
+  for (const part of raw.slice(i + 1).split('&')) {
+    const eq = part.indexOf('=');
+    if (eq < 0) continue;
+    const k = part.slice(0, eq).trim();
+    let v = part.slice(eq + 1).trim();
+    try { v = decodeURIComponent(v); } catch { /* mantém */ }
+    if (/^user-agent$/i.test(k)) opts.ua = v;
+    else if (/^referr?er$/i.test(k)) opts.ref = v;
+  }
+  return raw.slice(0, i);
+}
+
 export function parseM3U(text) {
   const header = {};
   const entries = [];
   let cur = null;
+  let opts = {};
   const lines = text.split(/\r?\n/);
   for (let raw of lines) {
     const line = raw.trim();
@@ -33,6 +64,7 @@ export function parseM3U(text) {
       const a = attrs(line);
       const epg = a['url-tvg'] || a['x-tvg-url'] || a['tvg-url'];
       if (epg) header.epg = epg.split(',')[0].trim();
+      if (a['tvg-shift']) header.shift = Number(a['tvg-shift']) || 0;
     } else if (line.startsWith('#EXTINF')) {
       const [left, name] = splitInfo(line.slice(line.indexOf(':') + 1));
       const a = attrs(left);
@@ -45,14 +77,22 @@ export function parseM3U(text) {
         chno: a['tvg-chno'] || '',
         tvgLanguage: a['tvg-language'] || '',
         tvgCountry: a['tvg-country'] || '',
+        shift: a['tvg-shift'] !== undefined ? Number(a['tvg-shift']) || 0 : null,
       };
     } else if (line.startsWith('#EXTGRP:')) {
       if (cur && !cur.group) cur.group = line.slice(8).trim();
+    } else if (/^#EXTVLCOPT:/i.test(line)) {
+      vlcOpt(line, opts);
+    } else if (/^#EXTHTTP:/i.test(line)) {
+      extHttp(line, opts);
     } else if (line.startsWith('#')) {
       continue;
     } else {
-      const e = cur || { name: line, tvgId: '', tvgName: '', logo: '', group: '', chno: '', tvgLanguage: '', tvgCountry: '' };
-      e.url = line;
+      const e = cur || { name: line, tvgId: '', tvgName: '', logo: '', group: '', chno: '', tvgLanguage: '', tvgCountry: '', shift: null };
+      e.url = splitKodiUrl(line, opts);
+      if (opts.ua) e.ua = opts.ua;
+      if (opts.ref) e.ref = opts.ref;
+      opts = {};
       if (!e.name) e.name = e.tvgName || line;
       entries.push(e);
       cur = null;
@@ -116,6 +156,8 @@ export function buildFromM3U(pid, text) {
         url: e.url,
         ext: extM ? extM[1] : '',
         logo: e.logo,
+        ...(e.ua ? { ua: e.ua } : {}),
+        ...(e.ref ? { ref: e.ref } : {}),
       });
       if (!s.logo && e.logo) s.logo = e.logo;
       continue;
@@ -125,12 +167,17 @@ export function buildFromM3U(pid, text) {
     const { lang, dn } = detectLang({ name: e.name, tvgLanguage: e.tvgLanguage, tvgCountry: e.tvgCountry, groupLang: cats[kind].get(c).lang });
     const base = { key: itemKey(pid, kind, id), pid, kind, id, name: e.name, n: norm(e.name), logo: e.logo, cat: c, url: e.url, lang };
     if (dn) base.dn = dn;
+    if (e.ua) base.ua = e.ua;
+    if (e.ref) base.ref = e.ref;
     if (kind === 'movie') { base.ver = detectVersion(e.name, e.group); base.vkey = versionKey(e.name); }
     if (kind === 'live') {
       liveNum++;
       base.num = Number(e.chno) || liveNum;
       base.epgId = (e.tvgId || '').toLowerCase();
       base.tvgName = e.tvgName;
+      // tvg-shift (horas) do canal ou, na falta dele, o do cabeçalho da lista.
+      const shift = e.shift !== null && e.shift !== undefined ? e.shift : header.shift || 0;
+      if (shift) base.shift = shift;
     }
     items.push(base);
   }

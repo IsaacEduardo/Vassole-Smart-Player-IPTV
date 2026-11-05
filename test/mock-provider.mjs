@@ -29,12 +29,15 @@ const vod = [
 // Conta "idiomas" (senha "idiomas"): os mesmos dados mais canais com prefixo de região
 // e um filme em versões dublada, legendada e em espanhol, para testar idiomas e versões.
 const ACCOUNTS = { [U]: PW, idiomas: 'idiomas' };
-const liveCatsLang = [...liveCats, { category_id: '3', category_name: 'PT | Portugal' }, { category_id: '4', category_name: 'UK: News' }];
+const liveCatsLang = [...liveCats, { category_id: '3', category_name: 'PT | Portugal' }, { category_id: '4', category_name: 'UK: News' }, { category_id: '5', category_name: 'Adultos' }];
 const liveLang = [...live,
   { num: 6, name: 'PT: RTP Teste', stream_id: 106, stream_icon: '', epg_channel_id: '', category_id: '3', tv_archive: 0 },
   { num: 7, name: 'PT: SIC Teste', stream_id: 107, stream_icon: '', epg_channel_id: '', category_id: '3', tv_archive: 0 },
   { num: 8, name: 'EN: World News', stream_id: 108, stream_icon: '', epg_channel_id: '', category_id: '4', tv_archive: 0 },
   { num: 9, name: 'ES - Noticias 24', stream_id: 109, stream_icon: '', epg_channel_id: '', category_id: '1', tv_archive: 0 },
+  // Mesma emissora em FHD, mas o endereço não responde: o app deve cair para a outra versão.
+  { num: 10, name: 'PT: RTP Teste FHD', stream_id: 110, stream_icon: '', epg_channel_id: '', category_id: '3', tv_archive: 0 },
+  { num: 11, name: 'Canal Adulto Teste', stream_id: 111, stream_icon: '', epg_channel_id: '', category_id: '5', tv_archive: 0 },
 ];
 const vodCatsLang = [...vodCats, { category_id: '12', category_name: 'Filmes Dublados' }, { category_id: '13', category_name: 'Filmes Legendados' }, { category_id: '14', category_name: 'Movies Spanish' }];
 const vodLang = [...vod,
@@ -141,6 +144,28 @@ http.createServer((req, res) => {
     return res.writeHead(200, { 'Content-Type': 'application/gzip' }).end(gzipSync(xmltv()));
   }
   if (p === '/epg.xml') return res.writeHead(200, { 'Content-Type': 'application/xml; charset=utf-8' }).end(xmltv());
+  // Lista extra: cabeçalhos por canal (Referer exigido), tvg-shift e qualidades do mesmo canal.
+  if (p === '/m3u/extras.m3u') {
+    return res.writeHead(200, { 'Content-Type': 'audio/x-mpegurl' }).end(`#EXTM3U url-tvg="${base}/epg.xml"
+#EXTINF:-1 tvg-id="noticias.br" tvg-shift="1" group-title="Extras",Canal Protegido
+#EXTVLCOPT:http-referrer=https://referer.teste/
+#EXTVLCOPT:http-user-agent=TesteUA/1.0
+${base}/protected/index.m3u8
+#EXTINF:-1 group-title="Extras",Canal Sem Referer
+${base}/protected/index.m3u8
+#EXTINF:-1 group-title="Extras",Canal Duplo HD
+${base}/hls/index.m3u8
+#EXTINF:-1 group-title="Extras",Canal Duplo SD
+${base}/hls/index.m3u8
+`);
+  }
+  // Só responde com o Referer e o User-Agent do canal (#EXTVLCOPT).
+  const pm = /^\/protected\/(index\.m3u8|seg\d+\.ts)$/.exec(p);
+  if (pm) {
+    if (req.headers.referer !== 'https://referer.teste/' || req.headers['user-agent'] !== 'TesteUA/1.0') return res.writeHead(403).end('Referer ou User-Agent ausente');
+    if (pm[1] === 'index.m3u8') return res.writeHead(200, { 'Content-Type': 'application/vnd.apple.mpegurl' }).end(readFileSync(join(MEDIA, 'hls', 'index.m3u8')));
+    return sendFile(req, res, join(MEDIA, 'hls', pm[1]), 'video/mp2t');
+  }
   if (p === '/m3u/list.m3u') return res.writeHead(200, { 'Content-Type': 'audio/x-mpegurl' }).end(m3u(false));
   if (p === '/stream/noext') return res.writeHead(302, { Location: '/hls/index.m3u8' }).end();
   if (p === '/subs/oceano.srt') return res.writeHead(200, { 'Content-Type': 'application/x-subrip' }).end(Buffer.from(srtBody(), 'latin1'));
@@ -149,6 +174,7 @@ http.createServer((req, res) => {
   let m = /^\/live\/([^/]+)\/([^/]+)\/(\d+)\.(m3u8|ts)$/.exec(p);
   if (m) {
     if (ACCOUNTS[m[1]] !== m[2]) return res.writeHead(401).end();
+    if (m[3] === '110') return res.writeHead(404).end();
     // Redireciona como os balanceadores dos painéis Xtream.
     if (m[4] === 'm3u8') return res.writeHead(302, { Location: `/hls/index.m3u8?token=x${m[3]}` }).end();
     return sendFile(req, res, join(MEDIA, 'live.ts'), 'video/mp2t');

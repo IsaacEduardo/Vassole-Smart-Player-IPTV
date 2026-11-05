@@ -40,6 +40,7 @@ assert.ok(rw.includes(`/proxy?u=${encodeURIComponent('http://cdn.example/a/seg0.
 const listen = (srv) => new Promise((r) => srv.listen(0, '127.0.0.1', () => r(srv.address().port)));
 const origin = http.createServer((req, res) => {
   if (req.url === '/ok') return res.writeHead(200, { 'Content-Type': 'text/plain' }).end('ok');
+  if (req.url === '/echo-ref') return res.writeHead(200, { 'Content-Type': 'text/plain' }).end(req.headers.referer || '-');
   if (req.url === '/redir') return res.writeHead(302, { Location: `http://127.0.0.2:${oport}/ok` }).end();
   if (req.url === '/redir-ok') return res.writeHead(301, { Location: '/ok' }).end();
   if (req.url === '/live.m3u8') {
@@ -105,6 +106,13 @@ r = await get(lax.port, P(`http://127.0.0.1:${oport}/ok`), { 'Sec-Fetch-Site': '
 assert.equal(r.status, 403, 'requisição vinda de outro site');
 r = await get(lax.port, P(`http://127.0.0.1:${oport}/ok`), { Host: `atacante.example:${lax.port}` });
 assert.equal(r.status, 403, 'Host estranho (DNS rebinding)');
+
+// Referer do canal: repassado à origem e às URLs reescritas da playlist HLS.
+r = await get(lax.port, `${P(`http://127.0.0.1:${oport}/echo-ref`)}&ref=${encodeURIComponent('https://site.example/')}`);
+assert.equal(r.body.toString(), 'https://site.example/');
+r = await get(lax.port, `${P(`http://127.0.0.1:${oport}/echo-ref`)}&ref=${encodeURIComponent('javascript:alert(1)')}`);
+assert.equal(r.body.toString(), '-', 'Referer inválido é descartado');
+assert.ok(rewriteHls('#EXTM3U\n#EXTINF:2,\nseg.ts\n', 'http://c.example/', 'UA', 'https://r.example/').includes('&ref=https%3A%2F%2Fr.example%2F'));
 
 // --allow-private libera tudo.
 const open = await proxyServer({ allowPrivate: true });
