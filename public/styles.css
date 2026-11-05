@@ -315,3 +315,7 @@ img.noimg { visibility: hidden; }
   .obtn.big { width: 3.2rem; height: 3.2rem; }
   :root { --gch: 9rem; }
 }
+/* Com a barra do player visível, a legenda sobe para não ficar coberta (Chrome, Edge, Safari). */
+#player video::-webkit-media-text-track-container { transition: transform .25s; }
+#player.osd-on video::-webkit-media-text-track-container { transform: translateY(-17vh); }
+.sync-val {font-size: 1.35rem; font-weight: 700; margin: .25rem 0 1rem; }

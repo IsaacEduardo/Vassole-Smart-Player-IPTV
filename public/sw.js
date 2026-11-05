@@ -1,9 +1,9 @@
 // Service worker: guarda apenas os arquivos do app para abrir sem rede.
 // Nunca armazena streams, playlists, guias ou respostas do proxy.
-const VERSION = 'sintonia-1.0.0-2';
+const VERSION = 'sintonia-1.0.0-3';
 const SHELL = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest',
-  'js/app.js', 'js/db.js', 'js/m3u.js', 'js/nav.js', 'js/net.js', 'js/player.js', 'js/store.js',
+  'js/app.js', 'js/db.js', 'js/lang.js', 'js/m3u.js', 'js/nav.js', 'js/net.js', 'js/player.js', 'js/store.js', 'js/subs.js', 'js/subs-core.js',
   'js/sync.js', 'js/sync-worker.js', 'js/tasks.js', 'js/ui.js', 'js/util.js',
   'js/views-admin.js', 'js/views-common.js', 'js/views-detail.js', 'js/views-guide.js', 'js/views-home.js',
   'js/views-live.js', 'js/views-search.js', 'js/views-vod.js', 'js/xmltv.js', 'js/xtream.js',

@@ -8,6 +8,12 @@ export const DEFAULTS = {
   ua: '',
   liveFormat: 'auto',     // auto | hls | ts
   aspect: 'contain',      // contain | cover | fill
+  subSize: 'm',           // s | m | l | xl
+  subColor: 'white',      // white | yellow
+  subBg: 'semi',          // none | semi | solid
+  subPos: 'bottom',       // bottom | raised | top
+  subLang: '',            // idioma preferido da legenda ('' = não ativar sozinho)
+  audioLang: '',          // idioma preferido do áudio ('' = o padrão do stream)
   autoUpdateHours: 24,
   epgUpdateHours: 12,
   active: null,

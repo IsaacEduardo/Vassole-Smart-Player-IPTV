@@ -6,6 +6,8 @@ import { xtreamFromUrl, normalizeServer } from './xtream.js';
 import { focusFirst } from './nav.js';
 import * as db from './db.js';
 import { add } from './views-common.js';
+import { applyCueStyle } from './subs.js';
+import { LANGS } from './lang.js';
 
 // Backup em JSON: playlists (com credenciais), favoritos, histórico e ajustes.
 export async function exportBackup() {
@@ -213,7 +215,8 @@ export async function viewSettings(root) {
   const st = S.settings;
   const section = (title, ...rows) => h('section', { class: 'set-sec' }, h('h2', null, title), ...rows);
   const row = (label, hint, control) => h('div', { class: 'set-row' }, h('div', null, h('div', { class: 'set-label' }, label), hint ? h('div', { class: 'muted small' }, hint) : null), control);
-  const proxyStatus = h('span', null, S.proxyAvailable ? 'Servidor local detectado.' : 'Servidor local não detectado: sem proxy, a origem precisa permitir CORS e o app precisa estar em http.');
+  const setCue = async (k, v) => { await setSetting(k, v); applyCueStyle(); };
+  const proxyStatus =h('span', null, S.proxyAvailable ? 'Servidor local detectado.' : 'Servidor local não detectado: sem proxy, a origem precisa permitir CORS e o app precisa estar em http.');
   const ua = h('input', { class: 'input', value: st.ua || '', placeholder: 'Padrão: Sintonia/1.0', 'aria-label': 'User-Agent' });
   ua.addEventListener('change', async () => { await setSetting('ua', ua.value.trim()); toast('User-Agent salvo'); });
   const importInput = h('input', { type: 'file', accept: 'application/json,.json', hidden: true });
@@ -250,6 +253,25 @@ export async function viewSettings(root) {
       row('Proporção da imagem', null, segmented([
         { value: 'contain', label: 'Ajustar' }, { value: 'cover', label: 'Preencher' }, { value: 'fill', label: 'Esticar' },
       ], st.aspect, (v) => { setSetting('aspect', v); document.querySelector('#player video, .stage video')?.style.setProperty('object-fit', v); }))),
+    section('Legendas e áudio',
+      row('Tamanho da legenda', null, segmented([
+        { value: 's', label: 'P' }, { value: 'm', label: 'M' }, { value: 'l', label: 'G' }, { value: 'xl', label: 'GG' },
+      ], st.subSize, (v) => setCue('subSize', v))),
+      row('Cor da legenda', null, segmented([
+        { value: 'white', label: 'Branca' }, { value: 'yellow', label: 'Amarela' },
+      ], st.subColor, (v) => setCue('subColor', v))),
+      row('Fundo da legenda', null, segmented([
+        { value: 'none', label: 'Nenhum' }, { value: 'semi', label: 'Translúcido' }, { value: 'solid', label: 'Sólido' },
+      ], st.subBg, (v) => setCue('subBg', v))),
+      row('Posição da legenda externa', 'Mais alta evita que a barra do player cubra o texto.', segmented([
+        { value: 'bottom', label: 'Embaixo' }, { value: 'raised', label: 'Mais alta' }, { value: 'top', label: 'Topo' },
+      ], st.subPos, (v) => setCue('subPos', v))),
+      row('Idioma preferido da legenda', 'Ativada sozinha quando o stream traz uma legenda nesse idioma.', segmented([
+        { value: '', label: 'Nenhum' }, ...LANGS.slice(0, 4).map((l) => ({ value: l.code, label: l.name })),
+      ], st.subLang, (v) => setSetting('subLang', v))),
+      row('Idioma preferido do áudio', 'Escolhido sozinho quando o stream traz várias faixas de áudio.', segmented([
+        { value: '', label: 'Padrão' }, ...LANGS.slice(0, 4).map((l) => ({ value: l.code, label: l.name })),
+      ], st.audioLang, (v) => setSetting('audioLang', v)))),
     section('Atualização automática',
       row('Lista de canais', 'Ao abrir o app, se a última atualização for mais antiga que o intervalo.', segmented([
         { value: 0, label: 'Desligada' }, { value: 12, label: '12 h' }, { value: 24, label: '24 h' }, { value: 72, label: '3 dias' },

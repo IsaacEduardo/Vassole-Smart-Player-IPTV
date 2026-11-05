@@ -77,6 +77,16 @@ function sendFile(req, res, file, type) {
   createReadStream(file).pipe(res);
 }
 
+// Legendas de teste para o filme (60 s): SRT em Windows-1252 (acentos) e VTT em UTF-8.
+const subCues = Array.from({ length: 14 }, (_, i) => ({
+  s: i * 4 + 1,
+  e: i * 4 + 4,
+  text: ['Legenda de teste: ação, coração e informação.', `Fala número ${i + 1}: você está vendo a legenda?`, 'Pão, avó, açúcar: acentuação ok.'][i % 3],
+}));
+const subTime = (s, sep) => `00:${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}${sep}000`;
+const srtBody = () => subCues.map((c, i) => `${i + 1}\r\n${subTime(c.s, ',')} --> ${subTime(c.e, ',')}\r\n${c.text}\r\n`).join('\r\n');
+const vttBody = () => `WEBVTT\n\n${subCues.map((c) => `${subTime(c.s, '.')} --> ${subTime(c.e, '.')}\n${c.text}\n`).join('\n')}`;
+
 const json = (res, v) => res.writeHead(200, { 'Content-Type': 'application/json' }).end(JSON.stringify(v));
 
 http.createServer((req, res) => {
@@ -115,6 +125,8 @@ http.createServer((req, res) => {
   if (p === '/epg.xml') return res.writeHead(200, { 'Content-Type': 'application/xml; charset=utf-8' }).end(xmltv());
   if (p === '/m3u/list.m3u') return res.writeHead(200, { 'Content-Type': 'audio/x-mpegurl' }).end(m3u(false));
   if (p === '/stream/noext') return res.writeHead(302, { Location: '/hls/index.m3u8' }).end();
+  if (p === '/subs/oceano.srt') return res.writeHead(200, { 'Content-Type': 'application/x-subrip' }).end(Buffer.from(srtBody(), 'latin1'));
+  if (p === '/subs/oceano.vtt') return res.writeHead(200, { 'Content-Type': 'text/vtt; charset=utf-8' }).end(vttBody());
 
   let m = /^\/live\/([^/]+)\/([^/]+)\/(\d+)\.(m3u8|ts)$/.exec(p);
   if (m) {

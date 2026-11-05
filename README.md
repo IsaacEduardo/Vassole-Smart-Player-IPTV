@@ -50,8 +50,9 @@ Proteções do proxy:
 | Séries | Temporadas e episódios via `get_series_info` ou montados a partir de nomes `S01E02` em listas M3U, progresso por episódio, próximo episódio automático. |
 | Início | Continuar assistindo, canais recentes, favoritos. |
 | Busca | Canais, filmes e séries, sem diferenciar acentos e maiúsculas. |
-| Player | HLS (hls.js), MPEG-TS (mpegts.js) e nativo (MP4, WebM, MKV conforme o navegador). Detecta o formato pelo conteúdo quando o link não tem extensão. Faixas de áudio, legendas, proporção (ajustar, preencher, esticar). |
-| Ajustes | Proxy, User-Agent, formato ao vivo Xtream (HLS ou MPEG-TS), atualização automática da lista e do guia, backup e restauração em JSON, limpeza de dados. |
+| Player | HLS (hls.js), MPEG-TS (mpegts.js) e nativo (MP4, WebM, MKV conforme o navegador). Detecta o formato pelo conteúdo quando o link não tem extensão. Faixas de áudio, legendas do stream, proporção (ajustar, preencher, esticar). |
+| Legendas | Em filmes e episódios, legenda externa `.srt` ou `.vtt` carregada de um arquivo ou de um link (pelo botão de legendas do player). Codificação detectada (UTF-8, UTF-16 ou Windows-1252). Sincronia em passos de 0,5 s. A legenda e o ajuste ficam salvos por filme ou episódio e voltam ao reabrir. A legenda sobe quando a barra do player aparece. |
+| Ajustes | Proxy, User-Agent, formato ao vivo Xtream (HLS ou MPEG-TS), legendas (tamanho, cor, fundo, posição), idioma preferido de legenda e de áudio (aplicado quando o stream traz faixas nesse idioma), atualização automática da lista e do guia, backup e restauração em JSON, limpeza de dados. |
 | PWA | Instalável e abre sem rede (somente a interface) quando servido em `localhost` ou `https`. |
 
 ## Controles
@@ -69,13 +70,14 @@ Proteções do proxy:
 
 - **Codecs:** a reprodução depende do navegador. HEVC/H.265 e áudio AC-3/E-AC-3 não funcionam na maioria dos navegadores de computador; nesses casos o player mostra o erro de codec.
 - **Navegadores de TV:** o app usa módulos JavaScript, IndexedDB e Media Source Extensions. Navegadores de TVs antigas podem não ter esses recursos. Não há pacote nativo Tizen (Samsung) ou webOS (LG) nesta versão.
-- **Fora desta versão:** catch-up/arquivo, controle parental, multi-tela, legendas externas, perfis.
+- **Legendas e faixas embutidas:** o Chrome e o Edge não expõem as legendas de texto nem as faixas de áudio extras gravadas dentro de arquivos MP4/MKV; nesses casos, use uma legenda externa. Legendas DVB e teletexto em streams MPEG-TS ao vivo não são exibidas. Legendas `.ass`/`.ssa` e arquivos `.zip` não são aceitos (extraia o `.srt`). As legendas externas não entram no backup.
+- **Fora desta versão:** catch-up/arquivo, controle parental, multi-tela, busca de legendas on-line, perfis.
 - **Segurança:** com `--host 0.0.0.0`, qualquer aparelho da rede local pode usar o proxy para acessar a internet (endereços privados continuam bloqueados, salvo com `--allow-private`). Use só em redes confiáveis. As credenciais ficam no IndexedDB do navegador, sem criptografia; o backup exportado também contém as credenciais.
 
 ## Testes
 
 ```
-npm test                                  # leitores de M3U, XMLTV e Xtream; regras e integração do proxy
+npm test                                  # leitores de M3U, XMLTV e Xtream; legendas e idiomas; proxy
 node test/mock-provider.mjs &             # provedor simulado em 127.0.0.1:9100 (sem CORS)
 node server.mjs --allow-private &         # o provedor de teste é local, por isso --allow-private
 python3 test/e2e.py capturas              # 32 verificações no Chrome (Playwright)
@@ -101,6 +103,9 @@ public/
   js/views-search.js    Busca
   js/views-admin.js     Playlists, Ajustes e backup
   js/player.js          player e barra de controles
+  js/subs.js            legendas e faixas de áudio no player (menus, legenda externa, sincronia, aparência)
+  js/subs-core.js       leitura de SRT/VTT, codificação e ajuste de tempo (sem DOM, testável)
+  js/lang.js            nomes e reconhecimento de idiomas
   js/nav.js             navegação espacial por setas
   js/store.js           estado, favoritos, histórico, guia
   js/db.js              IndexedDB, com migrações por versão (MIGRATIONS)

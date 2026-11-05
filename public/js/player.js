@@ -3,6 +3,7 @@ import { S, streamUrl, epgWithFallback, nowNext, saveHistory, getProgress, toggl
 import { h, icon, fmtClock, fmtTime, toast, choose, loadScript } from './ui.js';
 import { toNet } from './net.js';
 import { pushScope, popScope, focusEl } from './nav.js';
+import { initTracks, onItem, clearTracks, applyPrefs, audioList, hasStreamSubs, pickAudio, pickSubs } from './subs.js';
 
 const P = {
   token: 0, mode: 'closed', item: null, ctx: {}, live: false, hls: null, mts: null,
@@ -75,6 +76,7 @@ export function initPlayer() {
     showError(c === 4 ? 'Formato ou codec não suportado por este navegador.' : c === 3 ? 'Erro ao decodificar o vídeo.' : 'Não foi possível carregar o vídeo.');
   });
   setInterval(() => { if (P.mode === 'full') el.clock.textContent = fmtClock(Date.now()); }, 15000);
+  initTracks(video, { hls: () => P.hls, item: () => P.item, onUpdate: updateTrackButtons });
   applyAspect();
 }
 
@@ -153,8 +155,9 @@ async function load(url, live, startAt, token) {
         P.hls = hls;
         hls.on(Hls.Events.ERROR, (_, d) => onHlsError(d, token));
         hls.on(Hls.Events.MANIFEST_PARSED, () => tryPlay());
-        hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, updateTrackButtons);
-        hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, updateTrackButtons);
+        const tracksChanged = () => { applyPrefs(); updateTrackButtons(); };
+        hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, tracksChanged);
+        hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, tracksChanged);
         hls.loadSource(src);
         hls.attachMedia(video);
         return;
@@ -238,6 +241,7 @@ export async function play(item, ctx = {}) {
   root.classList.toggle('is-live', live);
   if (ctx.mode === 'preview' && P.mode !== 'full') mountPreview(ctx.mount); else showFull();
   updateInfo();
+  onItem(item);
   emit('player-item');
   let url;
   try { url = streamUrl(item); } catch (e) { showError(e.message); return; }
@@ -284,6 +288,7 @@ export function stop() {
   P.token++;
   persist(true);
   teardown();
+  clearTracks();
   spin(false);
   el.err.hidden = true;
   if (P.mode === 'full') popScope(scopeFn);
@@ -299,12 +304,14 @@ export function stop() {
 function osdVisible() { return osd.classList.contains('show'); }
 function showOsd(focus) {
   osd.classList.add('show');
+  root.classList.add('osd-on');
   clearTimeout(P.osdTimer);
   P.osdTimer = setTimeout(() => { if (!video.paused && el.err.hidden) hideOsd(); }, 5000);
   if (focus && !osd.contains(document.activeElement)) requestAnimationFrame(() => focusEl(el.bPlay));
 }
 function hideOsd() {
   osd.classList.remove('show');
+  root.classList.remove('osd-on');
   if (osd.contains(document.activeElement)) root.focus?.();
 }
 
@@ -382,42 +389,11 @@ async function updateInfo() {
   }
 }
 
-function audioList() {
-  if (P.hls) return P.hls.audioTracks.map((t, i) => ({ label: t.name || t.lang || `Faixa ${i + 1}`, value: i, active: P.hls.audioTrack === i }));
-  const at = video.audioTracks;
-  if (at && at.length) return Array.from(at).map((t, i) => ({ label: t.label || t.language || `Faixa ${i + 1}`, value: i, active: t.enabled }));
-  return [];
-}
-function subsList() {
-  if (P.hls && P.hls.subtitleTracks.length) {
-    return [{ label: 'Desativadas', value: -1, active: P.hls.subtitleTrack === -1 },
-      ...P.hls.subtitleTracks.map((t, i) => ({ label: t.name || t.lang || `Legenda ${i + 1}`, value: i, active: P.hls.subtitleTrack === i }))];
-  }
-  const tt = Array.from(video.textTracks || []).filter((t) => t.kind === 'subtitles' || t.kind === 'captions');
-  if (!tt.length) return [];
-  return [{ label: 'Desativadas', value: -1, active: tt.every((t) => t.mode !== 'showing') },
-    ...tt.map((t, i) => ({ label: t.label || t.language || `Legenda ${i + 1}`, value: i, active: t.mode === 'showing' }))];
-}
+// Áudio: só com mais de uma faixa. Legendas: em filmes e episódios sempre (para carregar uma externa);
+// ao vivo, só quando o stream traz legendas.
 function updateTrackButtons() {
   el.bAudio.disabled = audioList().length < 2;
-  el.bSubs.disabled = subsList().length < 2;
-}
-async function pickAudio() {
-  const list = audioList();
-  if (list.length < 2) { toast('Apenas uma faixa de áudio'); return; }
-  const v = await choose('Faixa de áudio', list);
-  if (v === undefined) return;
-  if (P.hls) P.hls.audioTrack = v;
-  else Array.from(video.audioTracks).forEach((t, i) => { t.enabled = i === v; });
-}
-async function pickSubs() {
-  const list = subsList();
-  if (list.length < 2) { toast('Sem legendas neste conteúdo'); return; }
-  const v = await choose('Legendas', list);
-  if (v === undefined) return;
-  if (P.hls && P.hls.subtitleTracks.length) { P.hls.subtitleTrack = v; P.hls.subtitleDisplay = v > -1; return; }
-  const tt = Array.from(video.textTracks).filter((t) => t.kind === 'subtitles' || t.kind === 'captions');
-  tt.forEach((t, i) => { t.mode = i === v ? 'showing' : 'disabled'; });
+  el.bSubs.disabled = !P.item || (P.item.kind === 'live' && !hasStreamSubs());
 }
 function applyAspect() { video.style.objectFit = S.settings.aspect || 'contain'; }
 function cycleAspect() {
