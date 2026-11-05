@@ -578,6 +578,6 @@ export async function exportBackup() {
   const data = { app: 'sintonia', version: 1, exported: new Date().toISOString(), playlists: playlists.map(({ fileText, ...p }) => ({ ...p, fileText: fileText && fileText.length < 5e6 ? fileText : undefined })), favorites, history: hist, settings };
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
   const a = h('a', { href: URL.createObjectURL(blob), download: `sintonia-backup-${new Date().toISOString().slice(0, 10)}.json` });
-  document.add(body, a); a.click(); a.remove();
+  document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
 }

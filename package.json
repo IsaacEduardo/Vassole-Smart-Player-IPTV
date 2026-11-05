@@ -8,7 +8,8 @@
   "scripts": {
     "start": "node server.mjs",
     "start:lan": "node server.mjs --host 0.0.0.0",
-    "test": "node test/unit.mjs",
+    "dev": "node server.mjs --allow-private",
+    "test": "node test/unit.mjs && node test/proxy.mjs",
     "mock": "node test/mock-provider.mjs"
   }
 }

@@ -20,11 +20,24 @@ Para usar na TV ou no celular da mesma rede:
 node server.mjs --host 0.0.0.0
 ```
 
-O terminal mostra o endereço (por exemplo `http://192.168.0.10:8080`). Abra esse endereço no navegador da TV. Opções: `--port 8080` e `--host 127.0.0.1` (padrão).
+O terminal mostra o endereço (por exemplo `http://192.168.0.10:8080`). Abra esse endereço no navegador da TV. Opções:
+
+| Opção | Efeito |
+|---|---|
+| `--port 8080` | Porta do servidor (padrão 8080). |
+| `--host 127.0.0.1` | Interface de rede (padrão `127.0.0.1`; `0.0.0.0` abre para a rede local). |
+| `--allow-private` | Permite que o proxy acesse endereços locais e da rede privada (`127.x`, `192.168.x`, `10.x` etc.). Necessário se o provedor estiver na sua própria rede (ex.: um servidor Tvheadend) e para o provedor de teste. Também por `ALLOW_PRIVATE=1`. |
+| `--allow-host nome` | Aceita abrir o app por outro nome além de `localhost`, dos IPs do computador e do nome da máquina (ex.: `--allow-host tv.casa`). |
 
 ### Por que existe um servidor local
 
 Navegadores bloqueiam o acesso direto à maioria dos provedores: as respostas não têm cabeçalhos CORS e os streams costumam ser `http`. O `server.mjs` entrega o app e faz proxy de playlists, guias e streams. Nas playlists HLS, ele reescreve os endereços de segmentos e chaves e segue redirecionamentos (comum em painéis Xtream). O modo do proxy fica em Ajustes: Automático, Sempre ou Desligado.
+
+Proteções do proxy:
+
+- Só atende o próprio app: recusa pedidos vindos de outros sites (`Origin`, `Sec-Fetch-Site`) e com nome de servidor desconhecido (proteção contra DNS rebinding). Não envia cabeçalhos CORS.
+- Não acessa endereços locais ou privados, nem por redirecionamento. O endereço é verificado no momento da conexão. Use `--allow-private` para liberar.
+- Aceita apenas `http` e `https`, e nunca acessa o próprio servidor.
 
 ## Funções
 
@@ -57,14 +70,14 @@ Navegadores bloqueiam o acesso direto à maioria dos provedores: as respostas n�
 - **Codecs:** a reprodução depende do navegador. HEVC/H.265 e áudio AC-3/E-AC-3 não funcionam na maioria dos navegadores de computador; nesses casos o player mostra o erro de codec.
 - **Navegadores de TV:** o app usa módulos JavaScript, IndexedDB e Media Source Extensions. Navegadores de TVs antigas podem não ter esses recursos. Não há pacote nativo Tizen (Samsung) ou webOS (LG) nesta versão.
 - **Fora desta versão:** catch-up/arquivo, controle parental, multi-tela, legendas externas, perfis.
-- **Segurança:** com `--host 0.0.0.0`, qualquer aparelho da rede local pode usar o proxy. Use só em redes confiáveis. As credenciais ficam no IndexedDB do navegador, sem criptografia; o backup exportado também contém as credenciais.
+- **Segurança:** com `--host 0.0.0.0`, qualquer aparelho da rede local pode usar o proxy para acessar a internet (endereços privados continuam bloqueados, salvo com `--allow-private`). Use só em redes confiáveis. As credenciais ficam no IndexedDB do navegador, sem criptografia; o backup exportado também contém as credenciais.
 
 ## Testes
 
 ```
-node test/unit.mjs                        # leitores de M3U, XMLTV e Xtream
-node test/mock-provider.mjs &             # provedor simulado na porta 9100 (sem CORS)
-node server.mjs &
+npm test                                  # leitores de M3U, XMLTV e Xtream; regras e integração do proxy
+node test/mock-provider.mjs &             # provedor simulado em 127.0.0.1:9100 (sem CORS)
+node server.mjs --allow-private &         # o provedor de teste é local, por isso --allow-private
 python3 test/e2e.py capturas              # 32 verificações no Chrome (Playwright)
 ```
 
@@ -73,7 +86,9 @@ O provedor simulado usa vídeos de teste que devem estar em `test/media/` (gerad
 ## Estrutura
 
 ```
-server.mjs              servidor estático + proxy (sem dependências)
+server.mjs              linha de comando do servidor (sem dependências)
+lib/app.mjs             servidor estático + proxy
+lib/netguard.mjs        regras de segurança do proxy (origem, destinos bloqueados)
 public/
   index.html, styles.css, sw.js, manifest.webmanifest
   js/app.js             inicialização, rotas, teclas
