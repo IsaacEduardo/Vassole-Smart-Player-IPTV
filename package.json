@@ -1,0 +1,14 @@
+{
+  "name": "sintonia",
+  "version": "1.0.0",
+  "description": "Player de IPTV para listas M3U e contas Xtream Codes, sem ativação.",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node server.mjs",
+    "start:lan": "node server.mjs --host 0.0.0.0",
+    "test": "node test/unit.mjs",
+    "mock": "node test/mock-provider.mjs"
+  }
+}

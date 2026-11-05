@@ -1,0 +1,8 @@
+node_modules/
+*.log
+.env
+.env.*
+# capturas do teste E2E (python3 test/e2e.py [pasta])
+shots/
+capturas/
+__pycache__/
