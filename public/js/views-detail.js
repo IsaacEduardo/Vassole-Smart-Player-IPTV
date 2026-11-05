@@ -1,10 +1,10 @@
 // Telas de detalhe: filme e série (temporadas e episódios).
-import { S, onChange, isFav, toggleFav, history, xtream, getProgress } from './store.js';
+import { S, onChange, isFav, toggleFav, history, xtream, getProgress, displayName } from './store.js';
 import { h, icon, img, fmtTime } from './ui.js';
 import * as player from './player.js';
 import { focusFirst } from './nav.js';
 import { itemKey } from './util.js';
-import { add, track, needPlaylist, progressBar } from './views-common.js';
+import { add, track, needPlaylist, progressBar, versionsRow } from './views-common.js';
 
 function detailShell(it, extraInfo) {
   return h('div', { class: 'detail' },
@@ -30,7 +30,7 @@ export async function viewMovie(root, [id]) {
   const resumable = rec && rec.pos > 30 && !rec.watched;
   const plot = h('p', { class: 'plot' });
   const meta = h('div');
-  add(body, h('h1', null, it.name), meta,
+  add(body, h('h1', null, displayName(it)), versionsRow(it), meta,
     h('div', { class: 'row' },
       h('button', { class: 'btn primary', 'data-autofocus': true, onclick: () => player.play(it, { mode: 'full', resume: resumable ? true : false }) },
         icon('play'), resumable ? `Retomar de ${fmtTime(rec.pos)}` : 'Assistir'),
@@ -88,7 +88,7 @@ export async function viewShow(root, [id]) {
   const plot = h('p', { class: 'plot' }, it.plot || '');
   const seasonsEl = h('div', { class: 'seasons', 'data-group': 'seasons' });
   const epsEl = h('div', { class: 'eps', 'data-group': 'eps' });
-  add(body, h('h1', null, it.name), meta, h('div', { class: 'row' }, playBtn, favBtn), plot, seasonsEl, epsEl);
+  add(body, h('h1', null, displayName(it)), versionsRow(it), meta, h('div', { class: 'row' }, playBtn, favBtn), plot, seasonsEl, epsEl);
   focusFirst(body);
 
   let bySeason = new Map();

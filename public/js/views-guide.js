@@ -1,17 +1,19 @@
 // Tela Guia: grade de programação de 6 horas.
-import { S, epgFor } from './store.js';
+import { S, epgFor, displayName } from './store.js';
 import { h, img, fmtClock, ago, modal, chunked } from './ui.js';
-import { add, track, liveState, needPlaylist, catButtons, liveList, playLive } from './views-common.js';
+import { add, track, liveState, needPlaylist, catButtons, liveList, playLive, langBar, byLang, checkLang } from './views-common.js';
 
 const PX_MIN = 6;
 const SLOT = 30 * 60000;
 export async function viewGuide(root) {
   if (needPlaylist(root)) return;
   root.classList.add('fill');
+  checkLang('live', liveState);
   const start = Math.floor(Date.now() / SLOT) * SLOT - SLOT;
   const span = 6 * 3600e3;
   const width = (span / 60000) * PX_MIN;
   const cats = h('div', { class: 'chips', 'data-group': 'gcats' });
+  const langs = h('div');
   const rows = h('div', { class: 'g-rows' });
   const scroller = h('div', { class: 'g-scroll' });
   let lister = null;
@@ -20,8 +22,15 @@ export async function viewGuide(root) {
   for (let t = start; t < start + span; t += SLOT) times.push(h('div', { class: 'g-time', style: { left: `${((t - start) / 60000) * PX_MIN}px` } }, fmtClock(t)));
   const nowLine = h('div', { class: 'g-nowline', style: { left: `calc(var(--gch) + ${((Date.now() - start) / 60000) * PX_MIN}px)` } });
 
+  function renderLangs() {
+    langs.replaceChildren(langBar('live', liveState, (v) => {
+      liveState.lang = v;
+      liveState.cat = '__all';
+      renderLangs(); renderCats(); renderRows();
+    }) || '');
+  }
   function renderCats() {
-    cats.replaceChildren(...catButtons('live', liveState, S.data.counts.live, (id, btn) => {
+    cats.replaceChildren(...catButtons('live', liveState, byLang(S.data.live, liveState.lang), (id, btn) => {
       liveState.cat = id;
       cats.querySelectorAll('.cat').forEach((b) => b.classList.toggle('on', b === btn));
       renderRows();
@@ -32,7 +41,7 @@ export async function viewGuide(root) {
     const live = p.s <= Date.now() && p.e > Date.now();
     const m = modal([
       h('h2', null, p.t || 'Sem título'),
-      h('p', { class: 'muted' }, `${ch.name} · ${new Date(p.s).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' })} · ${fmtClock(p.s)}–${fmtClock(p.e)}`),
+      h('p', { class: 'muted' }, `${displayName(ch)} · ${new Date(p.s).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: '2-digit' })} · ${fmtClock(p.s)}–${fmtClock(p.e)}`),
       p.d ? h('p', null, p.d) : null,
       h('div', { class: 'row end' },
         h('button', { class: 'btn', onclick: () => m.close() }, 'Fechar'),
@@ -44,7 +53,7 @@ export async function viewGuide(root) {
     const progs = h('div', { class: 'g-progs', style: { width: `${width}px` } });
     const el = h('div', { class: 'g-row' },
       h('button', { class: 'g-ch', 'data-key': ch.key, onclick: () => playLive(ch, list) },
-        h('span', { class: 'ch-logo' }, img(ch.logo, '')), h('span', { class: 'g-chname' }, ch.num ? `${ch.num} ${ch.name}` : ch.name)),
+        h('span', { class: 'ch-logo' }, img(ch.logo, '')), h('span', { class: 'g-chname' }, ch.num ? `${ch.num} ${displayName(ch)}` : displayName(ch))),
       progs);
     epgFor(ch).then((all) => {
       const vis = all.filter((p) => p.e > start && p.s < start + span);
@@ -67,7 +76,7 @@ export async function viewGuide(root) {
   function renderRows() {
     lister?.destroy();
     rows.replaceChildren();
-    const list = liveList(liveState.cat);
+    const list = liveList(liveState);
     if (!list.length) { rows.append(h('p', { class: 'muted pad' }, 'Nenhum canal nesta categoria.')); return; }
     lister = chunked(rows, list, (ch, i) => row(ch, i, list), { size: 40, root: scroller });
   }
@@ -78,7 +87,8 @@ export async function viewGuide(root) {
   add(root, h('div', { class: 'guide' },
     h('header', { class: 'page-head tight' }, h('h1', null, 'Guia de programação'),
       h('p', { class: 'muted' }, S.pl.epgSync ? `Guia atualizado ${ago(S.pl.epgSync)} · ${S.pl.epgCount || 0} canais com programação` : 'Guia ainda não carregado. Atualize em Playlists.')),
-    cats, scroller));
+    langs, cats, scroller));
+  renderLangs();
   renderCats();
   renderRows();
   requestAnimationFrame(() => { scroller.scrollLeft = Math.max(0, ((Date.now() - start) / 60000) * PX_MIN - 120); });

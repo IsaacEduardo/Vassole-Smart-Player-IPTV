@@ -26,6 +26,22 @@ const vod = [
   { stream_id: 202, name: 'Montanhas do Sul', stream_icon: '', category_id: '10', rating: '6.5', added: '1710000000', container_extension: 'mp4' },
   { stream_id: 203, name: 'A Última Estação', stream_icon: '', category_id: '11', rating: '8.4', added: '1720000000', container_extension: 'mp4' },
 ];
+// Conta "idiomas" (senha "idiomas"): os mesmos dados mais canais com prefixo de região
+// e um filme em versões dublada, legendada e em espanhol, para testar idiomas e versões.
+const ACCOUNTS = { [U]: PW, idiomas: 'idiomas' };
+const liveCatsLang = [...liveCats, { category_id: '3', category_name: 'PT | Portugal' }, { category_id: '4', category_name: 'UK: News' }];
+const liveLang = [...live,
+  { num: 6, name: 'PT: RTP Teste', stream_id: 106, stream_icon: '', epg_channel_id: '', category_id: '3', tv_archive: 0 },
+  { num: 7, name: 'PT: SIC Teste', stream_id: 107, stream_icon: '', epg_channel_id: '', category_id: '3', tv_archive: 0 },
+  { num: 8, name: 'EN: World News', stream_id: 108, stream_icon: '', epg_channel_id: '', category_id: '4', tv_archive: 0 },
+  { num: 9, name: 'ES - Noticias 24', stream_id: 109, stream_icon: '', epg_channel_id: '', category_id: '1', tv_archive: 0 },
+];
+const vodCatsLang = [...vodCats, { category_id: '12', category_name: 'Filmes Dublados' }, { category_id: '13', category_name: 'Filmes Legendados' }, { category_id: '14', category_name: 'Movies Spanish' }];
+const vodLang = [...vod,
+  { stream_id: 204, name: 'Oceano Profundo [DUB]', stream_icon: '', category_id: '12', rating: '7.9', added: '1700000000', container_extension: 'mp4' },
+  { stream_id: 205, name: 'Oceano Profundo [LEG]', stream_icon: '', category_id: '13', rating: '7.9', added: '1700000000', container_extension: 'mp4' },
+  { stream_id: 206, name: 'Montanhas do Sul', stream_icon: '', category_id: '14', rating: '6.5', added: '1710000000', container_extension: 'mp4' },
+];
 const seriesCats = [{ category_id: '20', category_name: 'Séries nacionais' }];
 const series = [
   { series_id: 301, name: 'Cidade Alta', cover: '', category_id: '20', rating: '8.1', plot: 'Drama urbano.', releaseDate: '2024-03-01', last_modified: '1720000000' },
@@ -93,17 +109,19 @@ http.createServer((req, res) => {
   const url = new URL(req.url, base);
   const q = url.searchParams;
   const p = url.pathname;
-  const auth = q.get('username') === U && q.get('password') === PW;
+  const user = q.get('username');
+  const auth = !!user && ACCOUNTS[user] === q.get('password');
+  const langs = user === 'idiomas';
 
   if (p === '/player_api.php') {
     if (!auth) return json(res, { user_info: { auth: 0 } });
     const a = q.get('action');
     if (!a) return json(res, { user_info: { auth: 1, status: 'Active', exp_date: String(Math.floor(Date.now() / 1000) + 30 * 86400), is_trial: '0', active_cons: '0', max_connections: '2', allowed_output_formats: ['m3u8', 'ts'] }, server_info: { url: '127.0.0.1', port: String(PORT) } });
-    if (a === 'get_live_categories') return json(res, liveCats);
-    if (a === 'get_vod_categories') return json(res, vodCats);
+    if (a === 'get_live_categories') return json(res, langs ? liveCatsLang : liveCats);
+    if (a === 'get_vod_categories') return json(res, langs ? vodCatsLang : vodCats);
     if (a === 'get_series_categories') return json(res, seriesCats);
-    if (a === 'get_live_streams') return json(res, live);
-    if (a === 'get_vod_streams') return json(res, vod);
+    if (a === 'get_live_streams') return json(res, langs ? liveLang : live);
+    if (a === 'get_vod_streams') return json(res, langs ? vodLang : vod);
     if (a === 'get_series') return json(res, series);
     if (a === 'get_vod_info') return json(res, { info: { plot: 'Um documentário de teste.', genre: 'Documentário', duration: '00:01:00', releasedate: '2023-05-01', rating: '7.9', cast: 'Elenco de teste', director: 'Direção de teste' }, movie_data: { stream_id: Number(q.get('vod_id')), container_extension: 'mp4' } });
     if (a === 'get_series_info') return json(res, { info: { name: 'Série', plot: 'Sinopse da série de teste.', genre: 'Drama', rating: '8.1', releaseDate: '2024-03-01' }, episodes: episodes(q.get('series_id')) });
@@ -130,7 +148,7 @@ http.createServer((req, res) => {
 
   let m = /^\/live\/([^/]+)\/([^/]+)\/(\d+)\.(m3u8|ts)$/.exec(p);
   if (m) {
-    if (m[1] !== U || m[2] !== PW) return res.writeHead(401).end();
+    if (ACCOUNTS[m[1]] !== m[2]) return res.writeHead(401).end();
     // Redireciona como os balanceadores dos painéis Xtream.
     if (m[4] === 'm3u8') return res.writeHead(302, { Location: `/hls/index.m3u8?token=x${m[3]}` }).end();
     return sendFile(req, res, join(MEDIA, 'live.ts'), 'video/mp2t');

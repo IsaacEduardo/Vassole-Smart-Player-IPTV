@@ -2,7 +2,7 @@
 import { S } from './store.js';
 import { h, debounce } from './ui.js';
 import { norm } from './util.js';
-import { add, needPlaylist, channelCard, posterCard } from './views-common.js';
+import { add, needPlaylist, channelCard, posterCard, collapseVersions } from './views-common.js';
 
 export async function viewSearch(root) {
   if (needPlaylist(root)) return;
@@ -14,8 +14,8 @@ export async function viewSearch(root) {
     if (!words.length) return;
     const match = (i) => words.every((w) => (i.n || norm(i.name)).includes(w));
     const live = S.data.live.filter(match);
-    const movies = S.data.movie.filter(match);
-    const series = S.data.series.filter(match);
+    const movies = collapseVersions(S.data.movie.filter(match));
+    const series = collapseVersions(S.data.series.filter(match));
     if (!live.length && !movies.length && !series.length) { out.append(h('p', { class: 'muted' }, 'Nenhum resultado.')); return; }
     const sec = (title, list, render) => (list.length ? h('section', { class: 'shelf' },
       h('h2', null, `${title} (${list.length})`), h('div', { class: 'grid', 'data-group': `res-${title}` }, list.slice(0, 60).map(render))) : null);

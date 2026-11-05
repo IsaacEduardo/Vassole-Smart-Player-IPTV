@@ -319,3 +319,13 @@ img.noimg { visibility: hidden; }
 #player video::-webkit-media-text-track-container { transition: transform .25s; }
 #player.osd-on video::-webkit-media-text-track-container { transform: translateY(-17vh); }
 .sync-val {font-size: 1.35rem; font-weight: 700; margin: .25rem 0 1rem; }
+/* Idiomas e versões */
+.with-langs { display: flex; flex-direction: column; height: 100%; gap: .25rem; }
+.with-langs > .live, .with-langs > .vod { height: auto; flex: 1; min-height: 0; }
+.lang-bar { padding-top: 0; }
+.chip-n { margin-left: .45rem; opacity: .65; font-size: .85em; font-variant-numeric: tabular-nums; }
+.badge-ver { position: absolute; top: .4rem; left: .4rem; background: rgba(0, 0, 0, .78); color: #fff; font-size: .72rem; font-weight: 700; letter-spacing: .02em; padding: .15rem .4rem; border-radius: .3rem; }
+.versions { display: flex; flex-wrap: wrap; gap: .4rem; margin: .25rem 0 .75rem; }
+.pref-langs { display: flex; flex-wrap: wrap; gap: .4rem; max-width: 40rem; justify-content: flex-end; }
+.chip .ord { display: inline-grid; place-items: center; width: 1.3rem; height: 1.3rem; margin-right: .35rem; border-radius: 50%; background: var(--bg); color: var(--text); font-size: .75rem; }
+@media (max-width: 800px) { .with-langs { height: auto; } }

@@ -55,11 +55,11 @@ export function runTask(cmd, pid, label, onProgress) {
         return await new Promise((res, rej) => {
           const id = ++seq;
           pending.set(id, { res, rej, onProgress: progress });
-          worker.postMessage({ id, cmd, pid, net: S.net });
+          worker.postMessage({ id, cmd, pid, net: S.net, opts: syncOpts() });
         });
       }
       const m = await import('./sync.js');
-      return await (cmd === 'epg' ? m.syncEpg : m.syncPlaylist)(pid, S.net, progress);
+      return await (cmd === 'epg' ? m.syncEpg : m.syncPlaylist)(pid, S.net, progress, syncOpts());
     } finally {
       running.delete(k);
       setBanner();
@@ -67,5 +67,7 @@ export function runTask(cmd, pid, label, onProgress) {
   })();
   return entry.promise;
 }
+
+function syncOpts() { return { langs: [...(S.settings.langPrefs || [])] }; }
 
 export const isRunning = (cmd, pid) => running.has(`${cmd}|${pid}`);

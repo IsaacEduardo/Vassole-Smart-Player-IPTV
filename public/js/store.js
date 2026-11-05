@@ -14,6 +14,9 @@ export const DEFAULTS = {
   subPos: 'bottom',       // bottom | raised | top
   subLang: '',            // idioma preferido da legenda ('' = não ativar sozinho)
   audioLang: '',          // idioma preferido do áudio ('' = o padrão do stream)
+  langPrefs: [],          // idiomas preferidos, em ordem
+  langHideOthers: false,  // esconder itens de outros idiomas (os sem idioma continuam visíveis)
+  stripLangPrefix: false, // exibir "PT: SIC" como "SIC"
   autoUpdateHours: 24,
   epgUpdateHours: 12,
   active: null,
@@ -82,17 +85,59 @@ export async function activate(pid) {
   ]);
   live.sort((a, b) => (a.num || 1e9) - (b.num || 1e9) || a.name.localeCompare(b.name));
   const byCat = (kind) => cats.filter((c) => c.pid === pid && c.kind === kind).sort((a, b) => a.order - b.order);
-  const counts = (list) => { const m = new Map(); for (const i of list) m.set(i.cat, (m.get(i.cat) || 0) + 1); return m; };
   S.data = {
-    live, movie, series,
+    all: { live, movie, series },
     cats: { live: byCat('live'), movie: byCat('movie'), series: byCat('series') },
-    counts: { live: counts(live), movie: counts(movie), series: counts(series) },
     byKey: new Map([...live, ...movie, ...series].map((i) => [i.key, i])),
+    hasLang: live.some((i) => 'lang' in i) || movie.some((i) => 'lang' in i),
+    langCounts: {}, versions: {},
   };
+  rebuildLists();
   S.favs = new Map(favs.map((f) => [f.key, f]));
   S.alias = aliasRec?.map || {};
   emit('playlist');
 }
+
+// ---- Idiomas e versões ----
+const KINDS = ['live', 'movie', 'series'];
+
+// Listas visíveis conforme os idiomas escolhidos, contagem por idioma e grupos de versões
+// (o mesmo título dublado, legendado ou em outro idioma vira um só cartão).
+export function rebuildLists() {
+  const D = S.data;
+  if (!D) return;
+  const prefs = S.settings.langPrefs || [];
+  const hide = S.settings.langHideOthers && prefs.length;
+  for (const kind of KINDS) {
+    const list = hide ? D.all[kind].filter((i) => !i.lang || prefs.includes(i.lang)) : D.all[kind];
+    D[kind] = list;
+    const lc = new Map();
+    for (const i of list) lc.set(i.lang || '', (lc.get(i.lang || '') || 0) + 1);
+    D.langCounts[kind] = lc;
+    if (kind !== 'live') D.versions[kind] = versionGroups(list);
+  }
+}
+
+function versionGroups(list) {
+  const by = new Map();
+  for (const i of list) {
+    if (!i.vkey) continue;
+    const g = by.get(i.vkey);
+    if (g) g.push(i); else by.set(i.vkey, [i]);
+  }
+  const out = new Map();
+  for (const [k, g] of by) {
+    if (g.length > 1 && new Set(g.map((i) => i.ver || i.lang || '')).size > 1) out.set(k, g);
+  }
+  return out;
+}
+
+export const versionsOf = (it) => (it?.vkey && S.data?.versions[it.kind]?.get(it.vkey)) || null;
+
+export function applyLangSettings() { rebuildLists(); emit('langs'); }
+
+// Nome exibido: sem o prefixo de região ("PT: SIC" -> "SIC") quando o ajuste estiver ligado.
+export const displayName = (it) => (S.settings.stripLangPrefix && it.dn) || it.name;
 
 export function refreshPlaylistMeta() {
   if (!S.pl) return;

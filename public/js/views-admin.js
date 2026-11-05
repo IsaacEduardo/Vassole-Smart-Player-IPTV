@@ -1,5 +1,5 @@
 // Telas de playlists e ajustes.
-import { S, setSetting, loadPlaylists, activate, computeNet, detectProxy } from './store.js';
+import { S, setSetting, loadPlaylists, activate, computeNet, detectProxy, applyLangSettings } from './store.js';
 import { h, icon, ago, fmtDate, toast, modal, confirmDialog, segmented } from './ui.js';
 import { runTask, isRunning } from './tasks.js';
 import { xtreamFromUrl, normalizeServer } from './xtream.js';
@@ -7,7 +7,7 @@ import { focusFirst } from './nav.js';
 import * as db from './db.js';
 import { add } from './views-common.js';
 import { applyCueStyle } from './subs.js';
-import { LANGS } from './lang.js';
+import { LANGS, langName } from './lang.js';
 
 // Backup em JSON: playlists (com credenciais), favoritos, histórico e ajustes.
 export async function exportBackup() {
@@ -216,6 +216,33 @@ export async function viewSettings(root) {
   const section = (title, ...rows) => h('section', { class: 'set-sec' }, h('h2', null, title), ...rows);
   const row = (label, hint, control) => h('div', { class: 'set-row' }, h('div', null, h('div', { class: 'set-label' }, label), hint ? h('div', { class: 'muted small' }, hint) : null), control);
   const setCue = async (k, v) => { await setSetting(k, v); applyCueStyle(); };
+  const setLang = async (k, v) => { await setSetting(k, v); applyLangSettings(); };
+
+  // Idiomas preferidos: os detectados na playlist ativa (mais frequentes primeiro) e os já escolhidos.
+  const prefBox = h('div', { class: 'pref-langs', 'data-group': 'pref-langs' });
+  const renderPrefs = () => {
+    const prefs = st.langPrefs || [];
+    const found = new Map();
+    for (const kind of ['live', 'movie', 'series']) {
+      for (const i of S.data?.all[kind] || []) if (i.lang) found.set(i.lang, (found.get(i.lang) || 0) + 1);
+    }
+    const codes = [...new Set([...prefs, ...[...found.keys()].sort((a, b) => found.get(b) - found.get(a))])];
+    if (!codes.length) codes.push(...LANGS.slice(0, 6).map((l) => l.code));
+    prefBox.replaceChildren(...codes.map((c) => {
+      const pos = prefs.indexOf(c);
+      return h('button', {
+        class: `chip${pos > -1 ? ' on' : ''}`, 'aria-pressed': String(pos > -1),
+        onclick: async () => {
+          const next = pos > -1 ? prefs.filter((x) => x !== c) : [...prefs, c];
+          await setLang('langPrefs', next);
+          renderPrefs();
+          prefBox.querySelector(`[data-code="${c}"]`)?.focus();
+        },
+        'data-code': c,
+      }, pos > -1 ? h('span', { class: 'ord' }, String(pos + 1)) : null, langName(c) || c.toUpperCase(), found.get(c) ? h('span', { class: 'chip-n' }, String(found.get(c))) : null);
+    }));
+  };
+  renderPrefs();
   const proxyStatus =h('span', null, S.proxyAvailable ? 'Servidor local detectado.' : 'Servidor local não detectado: sem proxy, a origem precisa permitir CORS e o app precisa estar em http.');
   const ua = h('input', { class: 'input', value: st.ua || '', placeholder: 'Padrão: Sintonia/1.0', 'aria-label': 'User-Agent' });
   ua.addEventListener('change', async () => { await setSetting('ua', ua.value.trim()); toast('User-Agent salvo'); });
@@ -253,6 +280,16 @@ export async function viewSettings(root) {
       row('Proporção da imagem', null, segmented([
         { value: 'contain', label: 'Ajustar' }, { value: 'cover', label: 'Preencher' }, { value: 'fill', label: 'Esticar' },
       ], st.aspect, (v) => { setSetting('aspect', v); document.querySelector('#player video, .stage video')?.style.setProperty('object-fit', v); }))),
+    section('Idiomas',
+      row('Idiomas preferidos', S.data && !S.data.hasLang
+        ? 'Atualize a lista em Playlists para detectar os idiomas desta playlist.'
+        : 'Aparecem primeiro nos filtros de idioma e na escolha de versões, na ordem em que forem marcados. Também definem o idioma dos títulos do guia (na próxima atualização do guia).', prefBox),
+      row('Outros idiomas', 'Esconder deixa visíveis só os idiomas preferidos. Itens sem idioma identificado continuam aparecendo.', segmented([
+        { value: false, label: 'Mostrar' }, { value: true, label: 'Esconder' },
+      ], !!st.langHideOthers, (v) => setLang('langHideOthers', v))),
+      row('Prefixo de região nos nomes', 'Esconder mostra “PT: SIC” como “SIC”.', segmented([
+        { value: false, label: 'Mostrar' }, { value: true, label: 'Esconder' },
+      ], !!st.stripLangPrefix, (v) => setSetting('stripLangPrefix', v)))),
     section('Legendas e áudio',
       row('Tamanho da legenda', null, segmented([
         { value: 's', label: 'P' }, { value: 'm', label: 'M' }, { value: 'l', label: 'G' }, { value: 'xl', label: 'GG' },

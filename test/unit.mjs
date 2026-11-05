@@ -47,6 +47,43 @@ await parseXmltv(stream, { onChannel: (c) => ch.push(c), onProgramme: (p) => pr.
 assert.equal(ch.length, 1); assert.equal(ch[0].icon, 'x.png'); assert.deepEqual(ch[0].names, ['Canal A']);
 assert.equal(pr.length, 2); assert.equal(pr[0].t, 'Jornal & Cia'); assert.equal(pr[0].d, 'Desc <b>'); assert.equal(pr[1].t, 'Filme épico');
 
+// Guia com títulos em vários idiomas: usa o preferido, senão o primeiro.
+const multi = `<tv><programme start="20261105120000 +0000" stop="20261105130000 +0000" channel="a"><title lang="en">News</title><title lang="pt">Notícias</title><desc lang="en">Daily</desc></programme></tv>`;
+const one = (langs) => new Promise((res) => {
+  const st = new ReadableStream({ start(c) { c.enqueue(multi); c.close(); } });
+  parseXmltv(st, { langs, onProgramme: res });
+});
+assert.equal((await one(['pt'])).t, 'Notícias');
+assert.equal((await one(['fr', 'en'])).t, 'News');
+assert.equal((await one([])).t, 'News');
+assert.equal((await one(['pt'])).d, 'Daily', 'sem descrição no idioma preferido, usa a que houver');
+
+// Idioma, nome sem prefixo e versões na leitura de M3U.
+const m3uLang = `#EXTM3U
+#EXTINF:-1 tvg-language="Portuguese" group-title="Notícias",Canal Sem Prefixo
+http://s/live/a.ts
+#EXTINF:-1 group-title="FR: France General",FR: TF1 HD
+http://s/live/b.ts
+#EXTINF:-1 group-title="Filmes Dublados",Matrix (1999)
+http://s/movie/u/p/1.mp4
+#EXTINF:-1 group-title="Filmes Legendados",Matrix (1999)
+http://s/movie/u/p/2.mp4
+#EXTINF:-1 group-title="Séries",Show Y [LEG] S01E01
+http://s/series/u/p/5.mp4
+`;
+const bl = buildFromM3U('p2', m3uLang);
+const byName = (n) => bl.items.find((i) => i.name === n);
+assert.equal(byName('Canal Sem Prefixo').lang, 'pt');
+assert.equal(byName('FR: TF1 HD').lang, 'fr');
+assert.equal(byName('FR: TF1 HD').dn, 'TF1 HD');
+assert.equal(bl.categories.find((c) => c.name === 'FR: France General').lang, 'fr');
+const mats = bl.items.filter((i) => i.kind === 'movie');
+assert.deepEqual(mats.map((m) => m.ver).sort(), ['dub', 'leg']);
+assert.equal(mats[0].vkey, mats[1].vkey, 'mesma chave de versão');
+const showY = bl.items.find((i) => i.kind === 'series');
+assert.equal(showY.ver, 'leg');
+assert.equal(showY.vkey, 'show y');
+
 assert.deepEqual(xtreamFromUrl('http://host:8080/get.php?username=a&password=b&type=m3u_plus&output=ts'), { server: 'http://host:8080', username: 'a', password: 'b' });
 assert.equal(xtreamFromUrl('http://host/lista.m3u'), null);
 assert.equal(normalizeServer('host.tv:8080/'), 'http://host.tv:8080');

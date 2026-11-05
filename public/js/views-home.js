@@ -1,5 +1,5 @@
 // Tela Início: continuar assistindo, recentes e favoritos.
-import { S, favItems, history } from './store.js';
+import { S, favItems, history, displayName } from './store.js';
 import { h, icon, img, fmtTime, fmtDate, ago } from './ui.js';
 import * as player from './player.js';
 import { add, go, needPlaylist, progressBar, shelf, channelCard, posterCard } from './views-common.js';
@@ -24,7 +24,7 @@ export async function viewHome(root) {
       : (S.data.byKey.get(r.key) || { ...r.item, key: r.key, pid: r.pid });
     return h('button', { class: 'card wide', 'data-key': r.key, onclick: () => player.play(it, { mode: 'full', resume: true }) },
       h('div', { class: 'thumb' }, img(it.logo, ''), progressBar(r)),
-      h('div', { class: 'cap' }, it.name, h('small', null, `${fmtTime(r.pos)} de ${fmtTime(r.dur)}`)));
+      h('div', { class: 'cap' }, displayName(it), h('small', null, `${fmtTime(r.pos)} de ${fmtTime(r.dur)}`)));
   };
 
   const favLive = favItems('live');

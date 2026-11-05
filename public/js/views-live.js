@@ -1,14 +1,15 @@
 // Tela TV ao vivo: categorias, lista de canais, prévia e guia do canal.
-import { S, onChange, isFav, toggleFav, epgFor, epgWithFallback, nowNext } from './store.js';
+import { S, onChange, isFav, toggleFav, epgFor, epgWithFallback, nowNext, displayName } from './store.js';
 import { h, icon, img, fmtClock, chunked, debounce } from './ui.js';
 import * as player from './player.js';
 import { focusEl } from './nav.js';
 import { norm } from './util.js';
-import { add, track, liveState, needPlaylist, catButtons, liveList } from './views-common.js';
+import { add, track, liveState, needPlaylist, catButtons, liveList, langBar, byLang, checkLang } from './views-common.js';
 
 export async function viewLive(root) {
   if (needPlaylist(root)) return;
   root.classList.add('fill');
+  checkLang('live', liveState);
   const preview = h('div', { class: 'preview' }, h('div', { class: 'preview-ph' }, icon('live'), h('span', null, 'Escolha um canal')));
   const info = h('div', { class: 'ch-info' });
   const chList = h('div', { class: 'ch-list', 'data-group': 'chs' });
@@ -17,7 +18,13 @@ export async function viewLive(root) {
   let current = [];
   let lister = null;
 
-  const renderCats = () => cats.replaceChildren(...catButtons('live', liveState, S.data.counts.live, (id, btn) => {
+  const langs = h('div');
+  const renderLangs = () => langs.replaceChildren(langBar('live', liveState, (v) => {
+    liveState.lang = v;
+    liveState.cat = '__all';
+    renderLangs(); renderCats(); renderChannels();
+  }) || '');
+  const renderCats = () => cats.replaceChildren(...catButtons('live', liveState, byLang(S.data.live, liveState.lang), (id, btn) => {
     liveState.cat = id;
     cats.querySelectorAll('.cat').forEach((b) => b.classList.toggle('on', b === btn));
     renderChannels();
@@ -38,7 +45,7 @@ export async function viewLive(root) {
     },
     h('span', { class: 'ch-num' }, ch.num ? String(ch.num) : ''),
     h('span', { class: 'ch-logo' }, img(ch.logo, '')),
-    h('span', { class: 'ch-main' }, h('span', { class: 'ch-name' }, ch.name), now, bar),
+    h('span', { class: 'ch-main' }, h('span', { class: 'ch-name' }, displayName(ch)), now, bar),
     isFav(ch) ? h('span', { class: 'ch-fav' }, icon('star')) : null);
     epgFor(ch).then((progs) => {
       const { now: p } = nowNext(progs);
@@ -53,7 +60,7 @@ export async function viewLive(root) {
     lister?.destroy();
     chList.replaceChildren();
     const words = norm(liveState.q).split(' ').filter(Boolean);
-    current = liveList(liveState.cat).filter((c) => words.every((w) => (c.n || norm(c.name)).includes(w)));
+    current = liveList(liveState).filter((c) => words.every((w) => (c.n || norm(c.name)).includes(w)));
     if (!current.length) { chList.append(h('p', { class: 'muted pad' }, liveState.cat === '__fav' ? 'Nenhum canal favorito. Use o botão de estrela durante a reprodução ou no painel ao lado.' : 'Nenhum canal.')); return; }
     lister = chunked(chList, current, row, { root: chList.parentElement });
   }
@@ -70,7 +77,7 @@ export async function viewLive(root) {
     } }, icon('star'), h('span', null, isFav(ch) ? 'Favorito' : 'Favoritar'));
     info.replaceChildren(
       h('div', { class: 'ch-info-head' }, h('div', { class: 'ch-logo lg' }, img(ch.logo, '')),
-        h('div', null, h('h2', null, ch.name), h('div', { class: 'muted' }, ch.num ? `Canal ${ch.num}` : ''))),
+        h('div', null, h('h2', null, displayName(ch)), h('div', { class: 'muted' }, ch.num ? `Canal ${ch.num}` : ''))),
       h('div', { class: 'row' },
         h('button', { class: 'btn sm primary', onclick: () => {
           if (player.current()?.key === ch.key) player.toFull();
@@ -97,10 +104,11 @@ export async function viewLive(root) {
 
   q.addEventListener('input', debounce(() => { liveState.q = q.value; renderChannels(); }, 250));
 
-  add(root, h('div', { class: 'live' },
+  add(root, h('div', { class: 'with-langs' }, langs, h('div', { class: 'live' },
     h('aside', { class: 'col' }, h('h2', { class: 'col-title' }, 'Categorias'), cats),
     h('section', { class: 'col' }, h('div', { class: 'col-title row' }, h('h2', null, 'Canais'), q), chList),
-    h('aside', { class: 'col side' }, preview, info)));
+    h('aside', { class: 'col side' }, preview, info))));
+  renderLangs();
   renderCats();
   renderChannels();
 

@@ -9,7 +9,7 @@
     "start": "node server.mjs",
     "start:lan": "node server.mjs --host 0.0.0.0",
     "dev": "node server.mjs --allow-private",
-    "test": "node test/unit.mjs && node test/subs.mjs && node test/proxy.mjs",
+    "test": "node test/unit.mjs && node test/lang.mjs && node test/subs.mjs && node test/proxy.mjs",
     "mock": "node test/mock-provider.mjs"
   }
 }

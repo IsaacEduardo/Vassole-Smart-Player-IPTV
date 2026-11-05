@@ -1,5 +1,6 @@
 // Leitura incremental de guias XMLTV (não carrega o arquivo inteiro na memória).
 import { decodeEntities } from './util.js';
+import { langOf } from './lang.js';
 
 export function parseXmltvDate(s) {
   const m = /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})?\s*([+-]\d{4})?/.exec(String(s || '').trim());
@@ -15,10 +16,20 @@ const attr = (s, name) => {
   const m = new RegExp(`\\b${name}\\s*=\\s*("([^"]*)"|'([^']*)')`).exec(s);
   return m ? decodeEntities(m[2] ?? m[3]) : '';
 };
-const text = (s, tag) => {
-  const m = new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)</${tag}>`).exec(s);
-  if (!m) return '';
-  return decodeEntities(m[1].replace(/^<!\[CDATA\[([\s\S]*)\]\]>$/, '$1')).trim();
+// Texto do elemento; com vários idiomas (<title lang="pt">), usa o primeiro da lista `langs` que existir.
+const text = (s, tag, langs) => {
+  const re = new RegExp(`<${tag}\\b([^>]*)>([\\s\\S]*?)</${tag}>`, 'g');
+  let first = null;
+  let best = null;
+  let bestRank = Infinity;
+  for (const m of s.matchAll(re)) {
+    const val = decodeEntities(m[2].replace(/^<!\[CDATA\[([\s\S]*)\]\]>$/, '$1')).trim();
+    if (first === null) first = val;
+    if (!langs || !langs.length) break;
+    const r = langs.indexOf(langOf(attr(m[1], 'lang')));
+    if (r > -1 && r < bestRank) { bestRank = r; best = val; }
+  }
+  return best ?? first ?? '';
 };
 const texts = (s, tag) => {
   const out = [];
@@ -29,7 +40,7 @@ const texts = (s, tag) => {
 };
 
 // stream: ReadableStream<string>
-export async function parseXmltv(stream, { onChannel, onProgramme, onProgress }) {
+export async function parseXmltv(stream, { onChannel, onProgramme, onProgress, langs }) {
   const reader = stream.getReader();
   let buf = '';
   let read = 0;
@@ -63,7 +74,7 @@ export async function parseXmltv(stream, { onChannel, onProgramme, onProgress })
       } else {
         const s = parseXmltvDate(attr(open, 'start'));
         const e = parseXmltvDate(attr(open, 'stop'));
-        if (Number.isFinite(s)) onProgramme?.({ ch: attr(open, 'channel'), s, e: Number.isFinite(e) ? e : s + 3600000, t: text(el, 'title'), d: text(el, 'desc') });
+        if (Number.isFinite(s)) onProgramme?.({ ch: attr(open, 'channel'), s, e: Number.isFinite(e) ? e : s + 3600000, t: text(el, 'title', langs), d: text(el, 'desc', langs) });
       }
       pos = end;
     }

@@ -1,6 +1,7 @@
 // Cliente da API Xtream Codes (player_api.php).
 import { fetchJSON } from './net.js';
 import { itemKey, norm } from './util.js';
+import { categoryLang, detectLang, detectVersion, versionKey } from './lang.js';
 
 export function normalizeServer(s) {
   let v = String(s || '').trim();
@@ -73,10 +74,21 @@ export async function loadXtream(pid, pl, net, progress) {
 
   const categories = [];
   const addCats = (kind, list) => {
-    arr(list).forEach((c, i) => categories.push({ key: itemKey(pid, kind, catId(c.category_id)), pid, kind, id: catId(c.category_id), name: c.category_name || 'Sem nome', order: i }));
-    categories.push({ key: itemKey(pid, kind, '__none'), pid, kind, id: '__none', name: 'Sem categoria', order: 1e6 });
+    arr(list).forEach((c, i) => categories.push({ key: itemKey(pid, kind, catId(c.category_id)), pid, kind, id: catId(c.category_id), name: c.category_name || 'Sem nome', order: i, lang: categoryLang(c.category_name) }));
+    categories.push({ key: itemKey(pid, kind, '__none'), pid, kind, id: '__none', name: 'Sem categoria', order: 1e6, lang: '' });
   };
   addCats('live', lc); addCats('movie', vc); addCats('series', sc);
+
+  // Idioma e versão (dublado/legendado) a partir do nome e da categoria.
+  const catOf = new Map(categories.map((c) => [`${c.kind}|${c.id}`, c]));
+  const extra = (kind, name, cat, vod) => {
+    const c = catOf.get(`${kind}|${cat}`);
+    const { lang, dn } = detectLang({ name, groupLang: c ? c.lang : '' });
+    const o = { lang };
+    if (dn) o.dn = dn;
+    if (vod) { o.ver = detectVersion(name, c ? c.name : ''); o.vkey = versionKey(name); }
+    return o;
+  };
 
   const items = [];
   for (const s of arr(ls)) {
@@ -84,6 +96,7 @@ export async function loadXtream(pid, pl, net, progress) {
       key: itemKey(pid, 'live', s.stream_id), pid, kind: 'live', id: String(s.stream_id),
       num: Number(s.num) || 0, name: s.name || '', n: norm(s.name), logo: s.stream_icon || '',
       cat: catId(s.category_id), epgId: String(s.epg_channel_id || '').toLowerCase(), archive: Number(s.tv_archive) || 0,
+      ...extra('live', s.name, catId(s.category_id), false),
     });
   }
   for (const s of arr(vs)) {
@@ -91,6 +104,7 @@ export async function loadXtream(pid, pl, net, progress) {
       key: itemKey(pid, 'movie', s.stream_id), pid, kind: 'movie', id: String(s.stream_id),
       name: s.name || '', n: norm(s.name), logo: s.stream_icon || '', cat: catId(s.category_id),
       rating: Number(s.rating) || 0, added: Number(s.added) || 0, ext: s.container_extension || 'mp4',
+      ...extra('movie', s.name, catId(s.category_id), true),
     });
   }
   for (const s of arr(ss)) {
@@ -98,6 +112,7 @@ export async function loadXtream(pid, pl, net, progress) {
       key: itemKey(pid, 'series', s.series_id), pid, kind: 'series', id: String(s.series_id),
       name: s.name || '', n: norm(s.name), logo: s.cover || '', cat: catId(s.category_id),
       rating: Number(s.rating) || 0, added: Number(s.last_modified) || 0, plot: s.plot || '', year: s.releaseDate || s.release_date || '',
+      ...extra('series', s.name, catId(s.category_id), true),
     });
   }
   const used = new Set(items.map((i) => `${i.kind}|${i.cat}`));

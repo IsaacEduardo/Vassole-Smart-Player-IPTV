@@ -1,5 +1,6 @@
 // Leitura de playlists M3U / M3U Plus e conversão em canais, filmes e séries.
 import { hash, itemKey, norm } from './util.js';
+import { categoryLang, detectLang, detectVersion, versionKey } from './lang.js';
 
 function splitInfo(s) {
   // "#EXTINF:-1 tvg-id="x" group-title="A, B",Nome do canal"
@@ -42,13 +43,15 @@ export function parseM3U(text) {
         logo: a['tvg-logo'] || a.logo || '',
         group: a['group-title'] || '',
         chno: a['tvg-chno'] || '',
+        tvgLanguage: a['tvg-language'] || '',
+        tvgCountry: a['tvg-country'] || '',
       };
     } else if (line.startsWith('#EXTGRP:')) {
       if (cur && !cur.group) cur.group = line.slice(8).trim();
     } else if (line.startsWith('#')) {
       continue;
     } else {
-      const e = cur || { name: line, tvgId: '', tvgName: '', logo: '', group: '', chno: '' };
+      const e = cur || { name: line, tvgId: '', tvgName: '', logo: '', group: '', chno: '', tvgLanguage: '', tvgCountry: '' };
       e.url = line;
       if (!e.name) e.name = e.tvgName || line;
       entries.push(e);
@@ -86,7 +89,7 @@ export function buildFromM3U(pid, text) {
   };
   const cat = (kind, name) => {
     const id = name || '__none';
-    if (!cats[kind].has(id)) cats[kind].set(id, { key: itemKey(pid, kind, id), pid, kind, id, name: name || 'Sem categoria', order: cats[kind].size });
+    if (!cats[kind].has(id)) cats[kind].set(id, { key: itemKey(pid, kind, id), pid, kind, id, name: name || 'Sem categoria', order: cats[kind].size, lang: categoryLang(name) });
     return id;
   };
 
@@ -98,7 +101,10 @@ export function buildFromM3U(pid, text) {
       const sid = `m${hash(`${e.group}|${sName}`)}`;
       let s = series.get(sid);
       if (!s) {
-        s = { key: itemKey(pid, 'series', sid), pid, kind: 'series', id: sid, name: sName, n: norm(sName), logo: e.logo, cat: cat('series', e.group), episodes: [] };
+        const c = cat('series', e.group);
+        const { lang, dn } = detectLang({ name: sName, tvgLanguage: e.tvgLanguage, tvgCountry: e.tvgCountry, groupLang: cats.series.get(c).lang });
+        s = { key: itemKey(pid, 'series', sid), pid, kind: 'series', id: sid, name: sName, n: norm(sName), logo: e.logo, cat: c, episodes: [], lang, ver: detectVersion(sName, e.group), vkey: versionKey(sName) };
+        if (dn) s.dn = dn;
         series.set(sid, s);
       }
       const extM = /\.(\w{2,4})(\?|$)/.exec(e.url);
@@ -115,7 +121,11 @@ export function buildFromM3U(pid, text) {
       continue;
     }
     const id = `m${uid(hash(`${kind}|${e.group}|${e.name}`))}`;
-    const base = { key: itemKey(pid, kind, id), pid, kind, id, name: e.name, n: norm(e.name), logo: e.logo, cat: cat(kind, e.group), url: e.url };
+    const c = cat(kind, e.group);
+    const { lang, dn } = detectLang({ name: e.name, tvgLanguage: e.tvgLanguage, tvgCountry: e.tvgCountry, groupLang: cats[kind].get(c).lang });
+    const base = { key: itemKey(pid, kind, id), pid, kind, id, name: e.name, n: norm(e.name), logo: e.logo, cat: c, url: e.url, lang };
+    if (dn) base.dn = dn;
+    if (kind === 'movie') { base.ver = detectVersion(e.name, e.group); base.vkey = versionKey(e.name); }
     if (kind === 'live') {
       liveNum++;
       base.num = Number(e.chno) || liveNum;

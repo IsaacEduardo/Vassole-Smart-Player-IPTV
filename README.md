@@ -44,10 +44,11 @@ Proteções do proxy:
 | Área | O que faz |
 |---|---|
 | Fontes | Conta Xtream Codes (servidor, usuário, senha), link M3U, arquivo M3U. Links `get.php?username=…&password=…` viram conta Xtream automaticamente. Várias playlists, uma ativa por vez. |
+| Idiomas | Idioma detectado ao atualizar a lista: atributos `tvg-language`/`tvg-country`, prefixos de região no nome (`PT:`, `[EN]`, `|FR|`, `ES -`, `EX-YU:`) e nomes de idioma ou país na categoria (`Movies Spanish`, `BR: Brazil General`, `Bolivia`). Filtro de idioma em TV ao vivo, Guia, Filmes e Séries. Nos Ajustes: idiomas preferidos (aparecem primeiro), esconder os demais e mostrar os nomes sem o prefixo de região. |
 | TV ao vivo | Categorias, filtro, favoritos, prévia com reprodução, painel com programa atual e próximos, tela cheia, troca de canal por setas, Canal+/−, ou digitando o número. |
-| Guia (EPG) | XMLTV (inclusive `.xml.gz`), lido em fluxo, sem carregar o arquivo inteiro na memória. Associação por `tvg-id` ou pelo nome do canal. Para Xtream sem XMLTV para o canal, usa `get_short_epg`. Grade de 6 horas com linha do horário atual. |
-| Filmes | Categorias, filtro, ordenação (padrão, A–Z, recentes, nota), detalhes via `get_vod_info`, retomar de onde parou. |
-| Séries | Temporadas e episódios via `get_series_info` ou montados a partir de nomes `S01E02` em listas M3U, progresso por episódio, próximo episódio automático. |
+| Guia (EPG) | XMLTV (inclusive `.xml.gz`), lido em fluxo, sem carregar o arquivo inteiro na memória. Associação por `tvg-id` ou pelo nome do canal. Para Xtream sem XMLTV para o canal, usa `get_short_epg`. Grade de 6 horas com linha do horário atual. Em guias com vários idiomas, usa o título e a descrição no idioma preferido. |
+| Filmes | Categorias, filtro, ordenação (padrão, A–Z, recentes, nota), detalhes via `get_vod_info`, retomar de onde parou. Versões do mesmo título (dublado, legendado, dual áudio ou outro idioma, por `[DUB]`, `(LEG)`, `Dublado`, `Legendado`, `DUAL` ou pela categoria) aparecem num só cartão; a versão é escolhida ao abrir e pode ser trocada no detalhe. |
+| Séries | Temporadas e episódios via `get_series_info` ou montados a partir de nomes `S01E02` em listas M3U, progresso por episódio, próximo episódio automático. Versões agrupadas como nos filmes. |
 | Início | Continuar assistindo, canais recentes, favoritos. |
 | Busca | Canais, filmes e séries, sem diferenciar acentos e maiúsculas. |
 | Player | HLS (hls.js), MPEG-TS (mpegts.js) e nativo (MP4, WebM, MKV conforme o navegador). Detecta o formato pelo conteúdo quando o link não tem extensão. Faixas de áudio, legendas do stream, proporção (ajustar, preencher, esticar). |
@@ -77,13 +78,13 @@ Proteções do proxy:
 ## Testes
 
 ```
-npm test                                  # leitores de M3U, XMLTV e Xtream; legendas e idiomas; proxy
+npm test                                  # leitores de M3U, XMLTV e Xtream; idiomas e versões; legendas; proxy
 node test/mock-provider.mjs &             # provedor simulado em 127.0.0.1:9100 (sem CORS)
 node server.mjs --allow-private &         # o provedor de teste é local, por isso --allow-private
 python3 test/e2e.py capturas              # 32 verificações no Chrome (Playwright)
 ```
 
-O provedor simulado usa vídeos de teste que devem estar em `test/media/` (gerados com ffmpeg; ver `test/media/README.txt`).
+O provedor simulado tem duas contas: `demo`/`demo` (dados básicos, usados pelo teste E2E) e `idiomas`/`idiomas` (os mesmos dados, mais canais com prefixo de região e um filme em versões dublada, legendada e em espanhol). Usa vídeos de teste que devem estar em `test/media/` (gerados com ffmpeg; ver `test/media/README.txt`).
 
 ## Estrutura
 
@@ -105,7 +106,7 @@ public/
   js/player.js          player e barra de controles
   js/subs.js            legendas e faixas de áudio no player (menus, legenda externa, sincronia, aparência)
   js/subs-core.js       leitura de SRT/VTT, codificação e ajuste de tempo (sem DOM, testável)
-  js/lang.js            nomes e reconhecimento de idiomas
+  js/lang.js            idiomas: nomes, códigos, detecção por prefixo/categoria e versões dublada/legendada
   js/nav.js             navegação espacial por setas
   js/store.js           estado, favoritos, histórico, guia
   js/db.js              IndexedDB, com migrações por versão (MIGRATIONS)

@@ -45,7 +45,8 @@ export async function syncPlaylist(pid, net, progress) {
   return { counts: pl.counts };
 }
 
-export async function syncEpg(pid, net, progress) {
+// opts.langs: idiomas preferidos, para escolher o título e a descrição nos guias com vários idiomas.
+export async function syncEpg(pid, net, progress, opts = {}) {
   const pl = await db.get('playlists', pid);
   if (!pl) throw new Error('Playlist não encontrada');
   const url = pl.epgUrl || (pl.type === 'xtream' ? new Xtream(pl, net).xmltvUrl() : '');
@@ -86,6 +87,7 @@ export async function syncEpg(pid, net, progress) {
       list.push({ s: p.s, e: p.e, t: p.t, d: p.d.length > 600 ? `${p.d.slice(0, 600)}…` : p.d });
       nProg++;
     },
+    langs: opts.langs || [],
     onProgress(bytes) { progress?.(`Lendo o guia… ${(bytes / 1e6).toFixed(0)} MB, ${nProg} programas`); },
   });
 

@@ -1,5 +1,5 @@
 // Player: HLS (hls.js), MPEG-TS (mpegts.js) e reprodução nativa (MP4/WebM/MKV conforme o navegador).
-import { S, streamUrl, epgWithFallback, nowNext, saveHistory, getProgress, toggleFav, isFav, setSetting, emit } from './store.js';
+import { S, streamUrl, epgWithFallback, nowNext, saveHistory, getProgress, toggleFav, isFav, setSetting, emit, displayName } from './store.js';
 import { h, icon, fmtClock, fmtTime, toast, choose, loadScript } from './ui.js';
 import { toNet } from './net.js';
 import { pushScope, popScope, focusEl } from './nav.js';
@@ -372,7 +372,7 @@ function onEnded() {
 
 async function updateInfo() {
   const it = P.item;
-  el.title.textContent = it.kind === 'live' && it.num ? `${it.num} · ${it.name}` : it.name;
+  el.title.textContent = it.kind === 'live' && it.num ? `${it.num} · ${displayName(it)}` : displayName(it);
   el.sub.textContent = '';
   el.bFav.hidden = it.kind === 'episode';
   el.bFav.classList.toggle('on', it.kind !== 'episode' && isFav(it));
