@@ -1,11 +1,12 @@
 // Service worker: guarda apenas os arquivos do app para abrir sem rede.
 // Nunca armazena streams, playlists, guias ou respostas do proxy.
-const VERSION = 'sintonia-1.0.0';
+const VERSION = 'sintonia-1.0.0-2';
 const SHELL = [
   './', 'index.html', 'styles.css', 'manifest.webmanifest',
   'js/app.js', 'js/db.js', 'js/m3u.js', 'js/nav.js', 'js/net.js', 'js/player.js', 'js/store.js',
-  'js/sync.js', 'js/sync-worker.js', 'js/tasks.js', 'js/ui.js', 'js/util.js', 'js/views.js',
-  'js/views-admin.js', 'js/xmltv.js', 'js/xtream.js',
+  'js/sync.js', 'js/sync-worker.js', 'js/tasks.js', 'js/ui.js', 'js/util.js',
+  'js/views-admin.js', 'js/views-common.js', 'js/views-detail.js', 'js/views-guide.js', 'js/views-home.js',
+  'js/views-live.js', 'js/views-search.js', 'js/views-vod.js', 'js/xmltv.js', 'js/xtream.js',
   'vendor/hls.min.js', 'vendor/mpegts.js',
   'fonts/ah-latin-400.woff2', 'fonts/ah-latin-700.woff2', 'fonts/ah-latin-ext-400.woff2', 'fonts/ah-latin-ext-700.woff2',
   'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/maskable-512.png',

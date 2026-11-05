@@ -37,9 +37,7 @@ export async function syncPlaylist(pid, net, progress) {
     if (!pl.epgUrl && result.epgUrl) pl.epgUrl = result.epgUrl;
   }
   progress?.('Gravando no aparelho…');
-  await db.clearPlaylistContent(pid);
-  await db.putMany('categories', result.categories);
-  await db.putMany('items', result.items);
+  await db.replacePlaylistContent(pid, result.categories, result.items);
   pl.counts = countKinds(result.items);
   pl.lastSync = Date.now();
   pl.error = '';
@@ -92,14 +90,13 @@ export async function syncEpg(pid, net, progress) {
   });
 
   progress?.('Gravando o guia…');
-  await db.deleteWhere('epg', null, db.epgRange(pid));
   const recs = [];
   for (const [ch, list] of progs) {
     list.sort((a, b) => a.s - b.s);
     recs.push({ pid, ch, progs: list });
   }
   recs.push({ pid, ch: '\u0001alias', map: alias });
-  await db.putMany('epg', recs, 500);
+  await db.replaceEpg(pid, recs);
   pl.epgSync = Date.now();
   pl.epgCount = progs.size;
   await db.put('playlists', pl);

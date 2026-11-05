@@ -5,9 +5,17 @@ import { runTask, isRunning } from './tasks.js';
 import { xtreamFromUrl, normalizeServer } from './xtream.js';
 import { focusFirst } from './nav.js';
 import * as db from './db.js';
-import { exportBackup } from './views.js';
+import { add } from './views-common.js';
 
-const add = (el, ...c) => el.append(...c.flat().filter((x) => x !== null && x !== undefined && x !== false));
+// Backup em JSON: playlists (com credenciais), favoritos, histórico e ajustes.
+export async function exportBackup() {
+  const [playlists, favorites, hist, settings] = await Promise.all([db.getAll('playlists'), db.getAll('favorites'), db.getAll('history'), db.getAll('settings')]);
+  const data = { app: 'sintonia', version: 1, exported: new Date().toISOString(), playlists: playlists.map(({ fileText, ...p }) => ({ ...p, fileText: fileText && fileText.length < 5e6 ? fileText : undefined })), favorites, history: hist, settings };
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+  const a = h('a', { href: URL.createObjectURL(blob), download: `sintonia-backup-${new Date().toISOString().slice(0, 10)}.json` });
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
 
 let rerender = () => {};
 export function setRerender(fn) { rerender = fn; }
@@ -259,7 +267,7 @@ export async function viewSettings(root) {
       } }, 'Limpar')),
       row('Apagar tudo', 'Remove todas as playlists, guias, favoritos, histórico e ajustes deste aparelho.', h('button', { class: 'btn sm danger', onclick: async () => {
         if (!await confirmDialog('Apagar todos os dados?', 'Esta ação não pode ser desfeita.', 'Apagar', true)) return;
-        for (const s of ['playlists', 'items', 'categories', 'epg', 'favorites', 'history', 'settings']) await db.clearStore(s);
+        for (const s of db.STORES) await db.clearStore(s);
         location.hash = '#/home'; location.reload();
       } }, 'Apagar'))),
     section('Sobre',

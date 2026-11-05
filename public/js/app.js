@@ -3,7 +3,13 @@ import { S, loadSettings, detectProxy, loadPlaylists, activate, onChange } from 
 import { h, icon, closeTopModal, toast } from './ui.js';
 import { move, focusFirst, focusEl, currentScope } from './nav.js';
 import * as player from './player.js';
-import { cleanups, viewHome, viewLive, viewGuide, viewVod, viewMovie, viewShow, viewSearch } from './views.js';
+import { cleanups } from './views-common.js';
+import { viewHome } from './views-home.js';
+import { viewLive } from './views-live.js';
+import { viewGuide } from './views-guide.js';
+import { viewVod } from './views-vod.js';
+import { viewMovie, viewShow } from './views-detail.js';
+import { viewSearch } from './views-search.js';
 import { viewPlaylists, viewSettings, setRerender, syncAndReload, syncEpg } from './views-admin.js';
 
 const ROUTES = {
@@ -152,6 +158,7 @@ async function autoUpdate() {
 }
 
 async function boot() {
+  document.addEventListener('db-blocked', () => toast('Feche as outras abas do Sintonia para concluir a atualização dos dados.', 10000));
   try {
     await openDB();
   } catch (e) {

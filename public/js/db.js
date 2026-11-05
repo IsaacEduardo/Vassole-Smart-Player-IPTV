@@ -1,25 +1,46 @@
 // Armazenamento local em IndexedDB. Usado pela página e pelo worker de sincronização.
 const NAME = 'sintonia';
-const VERSION = 1;
+
+// Migrações em ordem: MIGRATIONS[n] leva o banco da versão n para n + 1.
+// Nunca altere uma migração já publicada; acrescente uma nova no fim.
+const MIGRATIONS = [
+  (db) => { // 0 -> 1
+    db.createObjectStore('playlists', { keyPath: 'id' });
+    db.createObjectStore('items', { keyPath: 'key' }).createIndex('pk', ['pid', 'kind']);
+    db.createObjectStore('categories', { keyPath: 'key' }).createIndex('pk', ['pid', 'kind']);
+    db.createObjectStore('epg', { keyPath: ['pid', 'ch'] });
+    db.createObjectStore('favorites', { keyPath: 'key' }).createIndex('pid', 'pid');
+    db.createObjectStore('history', { keyPath: 'key' }).createIndex('pid', 'pid');
+    db.createObjectStore('settings', { keyPath: 'k' });
+  },
+  (db) => { // 1 -> 2: legendas externas e preferências por filme ou episódio
+    db.createObjectStore('subtitles', { keyPath: 'key' }).createIndex('pid', 'pid');
+  },
+];
+export const DB_VERSION = MIGRATIONS.length;
+export const STORES = ['playlists', 'items', 'categories', 'epg', 'favorites', 'history', 'settings', 'subtitles'];
 let dbp = null;
 
 export function openDB() {
   if (dbp) return dbp;
   dbp = new Promise((resolve, reject) => {
-    const r = indexedDB.open(NAME, VERSION);
-    r.onupgradeneeded = () => {
-      const db = r.result;
-      db.createObjectStore('playlists', { keyPath: 'id' });
-      db.createObjectStore('items', { keyPath: 'key' }).createIndex('pk', ['pid', 'kind']);
-      db.createObjectStore('categories', { keyPath: 'key' }).createIndex('pk', ['pid', 'kind']);
-      db.createObjectStore('epg', { keyPath: ['pid', 'ch'] });
-      db.createObjectStore('favorites', { keyPath: 'key' }).createIndex('pid', 'pid');
-      db.createObjectStore('history', { keyPath: 'key' }).createIndex('pid', 'pid');
-      db.createObjectStore('settings', { keyPath: 'k' });
+    const r = indexedDB.open(NAME, DB_VERSION);
+    r.onupgradeneeded = (e) => {
+      for (let v = e.oldVersion; v < DB_VERSION; v++) MIGRATIONS[v](r.result, r.transaction);
     };
-    r.onsuccess = () => resolve(r.result);
-    r.onerror = () => reject(r.error);
-    r.onblocked = () => reject(new Error('Banco de dados bloqueado por outra aba'));
+    r.onsuccess = () => {
+      const db = r.result;
+      // Outra aba (ou uma versão nova do app) precisa atualizar o banco: libera a conexão.
+      db.onversionchange = () => {
+        db.close();
+        dbp = null;
+        if (typeof location !== 'undefined' && typeof document !== 'undefined') location.reload();
+      };
+      resolve(db);
+    };
+    r.onerror = () => { dbp = null; reject(r.error); };
+    // Uma aba antiga ainda usa o banco: a atualização continua assim que ela for fechada.
+    r.onblocked = () => { if (typeof document !== 'undefined') document.dispatchEvent(new CustomEvent('db-blocked')); };
   });
   return dbp;
 }
@@ -62,7 +83,8 @@ export async function putMany(store, values, batch = 2000) {
   }
 }
 
-export async function deleteWhere(store, index, query) {
+// Apaga os registros do intervalo; com `keep`, preserva aqueles cuja chave primária ele aprovar.
+export async function deleteWhere(store, index, query, keep) {
   const db = await openDB();
   const tx = db.transaction(store, 'readwrite');
   const src = index ? tx.objectStore(store).index(index) : tx.objectStore(store);
@@ -70,7 +92,7 @@ export async function deleteWhere(store, index, query) {
   req.onsuccess = () => {
     const c = req.result;
     if (!c) return;
-    tx.objectStore(store).delete(c.primaryKey);
+    if (!keep || !keep(c.primaryKey)) tx.objectStore(store).delete(c.primaryKey);
     c.continue();
   };
   return done(tx);
@@ -85,16 +107,39 @@ export async function clearStore(store) {
 
 export const epgRange = (pid) => IDBKeyRange.bound([pid, ''], [pid, '￿']);
 
+const KINDS = ['live', 'movie', 'series'];
+
 export async function clearPlaylistContent(pid) {
-  for (const kind of ['live', 'movie', 'series']) {
+  for (const kind of KINDS) {
     await deleteWhere('items', 'pk', IDBKeyRange.only([pid, kind]));
     await deleteWhere('categories', 'pk', IDBKeyRange.only([pid, kind]));
   }
 }
 
+// Troca o conteúdo da playlist sem deixá-la vazia em caso de falha: grava os registros novos
+// (as chaves são estáveis, então os existentes são sobrescritos) e só depois remove os que sumiram.
+export async function replacePlaylistContent(pid, categories, items) {
+  await putMany('categories', categories);
+  await putMany('items', items);
+  const keepCats = new Set(categories.map((c) => c.key));
+  const keepItems = new Set(items.map((i) => i.key));
+  for (const kind of KINDS) {
+    await deleteWhere('items', 'pk', IDBKeyRange.only([pid, kind]), (k) => keepItems.has(k));
+    await deleteWhere('categories', 'pk', IDBKeyRange.only([pid, kind]), (k) => keepCats.has(k));
+  }
+}
+
+// Mesmo princípio para o guia: grava os canais novos e depois remove os que não vieram mais.
+export async function replaceEpg(pid, recs) {
+  await putMany('epg', recs, 500);
+  const keep = new Set(recs.map((r) => r.ch));
+  await deleteWhere('epg', null, epgRange(pid), (k) => keep.has(k[1]));
+}
+
 export async function deletePlaylist(pid) {
   await clearPlaylistContent(pid);
   await deleteWhere('epg', null, epgRange(pid));
+  await deleteWhere('subtitles', 'pid', IDBKeyRange.only(pid));
   await deleteWhere('favorites', 'pid', IDBKeyRange.only(pid));
   await deleteWhere('history', 'pid', IDBKeyRange.only(pid));
   await del('playlists', pid);

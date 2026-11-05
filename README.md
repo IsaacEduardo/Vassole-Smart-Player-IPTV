@@ -92,12 +92,18 @@ lib/netguard.mjs        regras de segurança do proxy (origem, destinos bloquead
 public/
   index.html, styles.css, sw.js, manifest.webmanifest
   js/app.js             inicialização, rotas, teclas
-  js/views.js           Início, TV ao vivo, Guia, Filmes, Séries, Busca
-  js/views-admin.js     Playlists e Ajustes
+  js/views-common.js    partes compartilhadas das telas (cartões, categorias, limpeza)
+  js/views-home.js      Início
+  js/views-live.js      TV ao vivo
+  js/views-guide.js     Guia
+  js/views-vod.js       Filmes e Séries (grade)
+  js/views-detail.js    detalhe de filme e de série
+  js/views-search.js    Busca
+  js/views-admin.js     Playlists, Ajustes e backup
   js/player.js          player e barra de controles
   js/nav.js             navegação espacial por setas
   js/store.js           estado, favoritos, histórico, guia
-  js/db.js              IndexedDB
+  js/db.js              IndexedDB, com migrações por versão (MIGRATIONS)
   js/m3u.js, xtream.js, xmltv.js   leitores das fontes
   js/sync.js, sync-worker.js, tasks.js   sincronização em segundo plano
   vendor/               hls.js 1.7.4 e mpegts.js 1.8.2 (Apache-2.0)
