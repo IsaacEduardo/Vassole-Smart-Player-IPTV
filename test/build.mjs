@@ -25,7 +25,7 @@ assert.equal(capsFor('browser', false).proxy, true);
 assert.equal(capsFor('browser', true).serviceWorker, false, 'pacote sem service worker');
 assert.equal(capsFor('tizen', true).proxy, false);
 assert.equal(capsFor('tizen', true).exitOnBack, true);
-assert.equal(capsFor('android', true).syncWorker, false);
+assert.equal(capsFor('android', true).proxy, true, 'Android: proxy do próprio APK');
 
 // ---- Teclas do controle ----
 const k = (o) => keyName({ key: '', keyCode: 0, ...o });

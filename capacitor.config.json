@@ -1,0 +1,12 @@
+{
+  "appId": "com.vassole.smartplayer",
+  "appName": "Vassole Smart Player IPTV",
+  "webDir": "dist/android",
+  "server": {
+    "androidScheme": "http",
+    "hostname": "localhost"
+  },
+  "android": {
+    "backgroundColor": "#0f1c21"
+  }
+}

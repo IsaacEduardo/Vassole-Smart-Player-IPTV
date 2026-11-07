@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Vassole Smart Player IPTV</string>
+    <string name="title_activity_main">Vassole Smart Player IPTV</string>
+    <string name="package_name">com.vassole.smartplayer</string>
+    <string name="custom_url_scheme">com.vassole.smartplayer</string>
+</resources>

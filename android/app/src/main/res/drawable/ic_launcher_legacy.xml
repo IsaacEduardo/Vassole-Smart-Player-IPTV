@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Gerado a partir de public/icons/icon.svg (anel e ponto amarelos sobre fundo escuro). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp" android:height="48dp" android:viewportWidth="48" android:viewportHeight="48">
+    <path android:pathData="M10.5,0 h27 a10.5,10.5 0 0,1 10.5,10.5 v27 a10.5,10.5 0 0,1 -10.5,10.5 h-27 a10.5,10.5 0 0,1 -10.5,-10.5 v-27 a10.5,10.5 0 0,1 10.5,-10.5 z" android:fillColor="#FF0F1C21" />
+    <path android:pathData="M9.94,24 a14.06,14.06 0 1,0 28.12,0 a14.06,14.06 0 1,0 -28.12,0" android:strokeColor="#FFF3D64B" android:strokeWidth="4.13" android:fillColor="#00000000" />
+    <path android:pathData="M18.56,24 a5.44,5.44 0 1,0 10.88,0 a5.44,5.44 0 1,0 -10.88,0" android:fillColor="#FFF3D64B" />
+</vector>

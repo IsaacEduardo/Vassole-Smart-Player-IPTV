@@ -33,10 +33,11 @@ export function detectPlatform(win) {
 export function capsFor(platform, bundled) {
   const browser = platform === 'browser';
   return {
-    proxy: browser,                       // só o navegador usa o server.mjs; os apps acessam direto
+    // Navegador: server.mjs. Android: o próprio APK atende /proxy (NativeProxy). TVs: acesso direto.
+    proxy: browser || platform === 'android',
     serviceWorker: browser && !bundled,   // pacotes não usam service worker
-    syncWorker: platform !== 'android',   // no Android o fetch do Capacitor não alcança o worker
-    browserFullscreen: browser || platform === 'android',
+    syncWorker: true,
+    browserFullscreen: browser,           // nos apps a tela já é do app
     exitOnBack: !browser,                 // Voltar no Início fecha o app (exigência das lojas de TV)
   };
 }
@@ -104,6 +105,15 @@ export function exitApp() {
     else if (PLATFORM === 'webos') { if (W.webOS && W.webOS.platformBack) W.webOS.platformBack(); else W.close(); }
     else if (PLATFORM === 'android' && W.Capacitor && W.Capacitor.Plugins && W.Capacitor.Plugins.App) W.Capacitor.Plugins.App.exitApp();
   } catch { /* sem API de saída */ }
+}
+
+// Botão Voltar do aparelho (Android, inclusive o do controle da Android TV). Nas TVs Samsung e LG
+// o Voltar chega como tecla (10009 / 461) e é tratado em keyName.
+export function onBackButton(fn) {
+  const app = PLATFORM === 'android' && W.Capacitor && W.Capacitor.Plugins && W.Capacitor.Plugins.App;
+  if (!app) return false;
+  app.addListener('backButton', () => fn());
+  return true;
 }
 
 // Motor de reprodução da plataforma. Nesta versão, todas usam o motor web (hls.js, mpegts.js e

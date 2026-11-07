@@ -106,7 +106,36 @@ Cada plataforma é gerada em `dist/<plataforma>/`:
 
 Para testar a saída no computador: `node server.mjs --root dist/browser --port 8081 --allow-private`.
 
-A camada `public/js/platform.js` deteta a plataforma (navegador, Android, Tizen, webOS), define o que cada uma permite (proxy, Web Worker, sair com Voltar), traduz as teclas do controlo remoto (incluindo o registo das teclas de mídia, números e coloridas na Samsung) e cria o motor de reprodução. Nesta versão todas as plataformas usam o motor web (`engine-web.js`: hls.js, mpegts.js e `<video>`); os motores nativos (ExoPlayer, AVPlay) e os pacotes `.apk`/`.wgt`/`.ipk` são as próximas etapas.
+A camada `public/js/platform.js` deteta a plataforma (navegador, Android, Tizen, webOS), define o que cada uma permite (proxy, Web Worker, sair com Voltar), traduz as teclas do controlo remoto (incluindo o registo das teclas de mídia, números e coloridas na Samsung) e cria o motor de reprodução. Nesta versão todas as plataformas usam o motor web (`engine-web.js`: hls.js, mpegts.js e `<video>`); o pacote Android já está incluído (abaixo); os motores nativos (ExoPlayer, AVPlay) e os pacotes `.wgt`/`.ipk` são as próximas etapas.
+
+### Android, Android TV, Google TV e Fire TV
+
+Projeto Capacitor em `android/` (identificador `com.vassole.smartplayer`). Um único APK serve telemóvel, tablet, Android TV, Google TV e Fire TV (aparece no launcher da TV com o banner `res/drawable-xhdpi/banner.png`).
+
+**Requisitos:** JDK 21 e Android SDK (API 36 é transferida pelo Gradle). Defina `JAVA_HOME` para o JDK 21; o caminho do SDK fica em `android/local.properties` (`sdk.dir=...`, fora do git).
+
+```bash
+npm run android:apk        # build web + sincroniza + APK de teste: android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+**Instalar para testar:** com a depuração USB (ou por rede) ativa no aparelho, `adb install -r android/app/build/outputs/apk/debug/app-debug.apk`. Também é possível copiar o APK para o aparelho e abri-lo (permita "instalar apps desconhecidas" para o gestor de ficheiros). No emulador, o computador responde em `10.0.2.2` (ex.: provedor de testes em `http://10.0.2.2:9100`).
+
+**Proxy dentro do APK:** os pedidos da página a `/proxy` e `/api/health` são atendidos em Java (`NativeProxy.java`, `HlsRewriter.java`), com as mesmas regras do `server.mjs`: redirecionamentos, `Range`, `User-Agent`/`Referer` por canal e reescrita de HLS. Só a página do app os vê — nada fica aberto em porta de rede. Assim, no Android funcionam também os cabeçalhos por canal e a leitura do guia em fluxo, inclusive no Web Worker. A reprodução usa, por enquanto, o motor web (hls.js, mpegts.js e `<video>`); o ExoPlayer (HEVC e AC-3 por hardware) é a próxima etapa.
+
+**Versão de produção (Google Play):**
+
+1. Crie a chave uma única vez e guarde-a fora do projeto, com cópia de segurança — sem ela não é possível publicar atualizações:
+   `keytool -genkeypair -v -keystore C:chavesassole.jks -alias vassole -keyalg RSA -keysize 4096 -validity 10000`
+2. Crie `android/keystore.properties` (fica fora do git):
+   ```properties
+   storeFile=C:/chaves/vassole.jks
+   storePassword=SENHA_DA_CHAVE
+   keyAlias=vassole
+   keyPassword=SENHA_DO_ALIAS
+   ```
+3. `npm run android:release` gera o `.aab` assinado (`android/app/build/outputs/bundle/release/`) para a Google Play e um `.apk` assinado para instalação direta.
+
+A versão (`versionName`/`versionCode`) vem do `package.json` (1.2.3 → 10203).
 
 ---
 
@@ -151,6 +180,8 @@ server.mjs                Entrada CLI do servidor HTTP (Node 18+, zero dependên
 scripts/
   build-sw.mjs            Gera a lista de ficheiros (SHELL) e o hash de versão do Service Worker
   build.mjs               Gera dist/<plataforma>/ (esbuild, alvo Chromium 56)
+android/                  Projeto Capacitor (APK/AAB): NativeProxy.java, HlsRewriter.java, MainActivity.java
+capacitor.config.json     Configuração do Capacitor (identificador, pasta web)
 lib/
   app.mjs                 Servidor estático, endpoint /api/health e proxy com reescrita HLS
   netguard.mjs            Segurança do proxy (validação de origem/Host e bloqueio de IPs privados/SSRF)
@@ -213,7 +244,7 @@ test/
 - **Suporte a codecs:** a descodificação de vídeo e áudio depende do navegador. Vídeo **HEVC (H.265)** e áudio **AC-3 / E-AC-3** não são suportados na maioria dos navegadores de computador; quando ocorrem, o player informa erro de codec.
 - **Faixas embutidas em MP4/MKV:** navegadores baseados em Chromium (Chrome, Edge) geralmente não expõem faixas de legendas de texto nem faixas de áudio secundárias embutidas em contentores MP4/MKV na reprodução nativa — nesses casos, carregue uma legenda externa `.srt` ou `.vtt`. Legendas DVB/teletexto em MPEG-TS ao vivo e ficheiros `.ass`/`.ssa` ou `.zip` não são suportados.
 - **Cabeçalhos por canal:** o envio de `User-Agent` e `Referer` específicos de um canal exige que o proxy local esteja ativo (os navegadores bloqueiam a alteração direta desses cabeçalhos via `fetch`).
-- **Compatibilidade em Smart TVs:** aberto pelo navegador da TV (via `server.mjs`), requer suporte a ES Modules, IndexedDB e Media Source Extensions (MSE). O build (`npm run build`) gera uma versão para Chromium 56+ (TVs de 2018 em diante); nessas TVs mais antigas, o espaçamento entre alguns elementos pode ficar menor (sem `gap` em flexbox antes do Chromium 84) e guias `.xml.gz` exigem Chromium 80+ (use o endereço `.xml`). Os pacotes instaláveis (`.apk`, `.wgt`, `.ipk`) ainda não estão incluídos.
+- **Compatibilidade em Smart TVs:** aberto pelo navegador da TV (via `server.mjs`), requer suporte a ES Modules, IndexedDB e Media Source Extensions (MSE). O build (`npm run build`) gera uma versão para Chromium 56+ (TVs de 2018 em diante); nessas TVs mais antigas, o espaçamento entre alguns elementos pode ficar menor (sem `gap` em flexbox antes do Chromium 84) e guias `.xml.gz` exigem Chromium 80+ (use o endereço `.xml`). O pacote Android (`.apk`/`.aab`) já é gerado; os pacotes `.wgt` (Samsung) e `.ipk` (LG) ainda não.
 - **Escopo atual:** não inclui *catch-up* / gravação (timeshift), multi-ecrã, pesquisa online de legendas nem múltiplos perfis de utilizador.
 - **Segurança na rede local e dados:** ao iniciar com `--host 0.0.0.0`, qualquer dispositivo na mesma rede local pode utilizar o proxy para aceder à internet (IPs privados permanecem bloqueados, exceto com `--allow-private`). Utilize apenas em redes domésticas confiáveis. As credenciais das listas ficam guardadas no IndexedDB do navegador e nos ficheiros JSON de backup em texto simples; o PIN parental é guardado como hash simples (FNV-1a), adequado só como barreira de uso doméstico.
 

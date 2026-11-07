@@ -13,9 +13,16 @@
     "mock": "node test/mock-provider.mjs",
     "build:sw": "node scripts/build-sw.mjs",
     "build": "node scripts/build.mjs",
-    "build:dev": "node scripts/build.mjs --dev"
+    "build:dev": "node scripts/build.mjs --dev",
+    "android:sync": "node scripts/build.mjs android && npx cap sync android",
+    "android:apk": "npm run android:sync && cd android && gradlew assembleDebug",
+    "android:release": "npm run android:sync && cd android && gradlew bundleRelease assembleRelease"
   },
   "devDependencies": {
+    "@capacitor/android": "8.6.0",
+    "@capacitor/app": "8.1.2",
+    "@capacitor/cli": "8.6.0",
+    "@capacitor/core": "8.6.0",
     "esbuild": "0.28.2"
   }
 }

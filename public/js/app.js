@@ -1,6 +1,6 @@
 import './polyfills.js';
 import { openDB } from './db.js';
-import { caps, keyName, registerKeys, exitApp } from './platform.js';
+import { caps, keyName, registerKeys, exitApp, onBackButton } from './platform.js';
 import { S, loadSettings, detectProxy, loadPlaylists, activate, onChange } from './store.js';
 import { h, icon, closeTopModal, toast, confirmDialog } from './ui.js';
 import { move, focusFirst, focusEl, currentScope } from './nav.js';
@@ -164,6 +164,8 @@ async function boot() {
   onChange((w) => { if (w === 'playlist') document.getElementById('sb-pl').textContent = S.pl ? S.pl.name : ''; });
   await render();
   registerKeys();
+  // Android: o Voltar do aparelho passa pelo mesmo caminho da tecla Voltar (player, diálogos, telas).
+  onBackButton(() => { if (!(player.isFull() && !document.querySelector('.modal') && player.onKey('back'))) goBack(); });
   if (caps.proxy && location.protocol === 'https:' && !S.net.proxy) toast('Aviso: em https, streams http são bloqueados pelo navegador. Use o servidor local.', 7000);
   if (caps.serviceWorker && 'serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('sw.js').catch(() => {});
   setTimeout(autoUpdate, 1500);
