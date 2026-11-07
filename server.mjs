@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Sintonia — servidor local: entrega o app e faz proxy de playlists, EPG e streams.
+// Vassole Smart Player IPTV — servidor local: entrega o app e faz proxy de playlists, EPG e streams.
 // Sem dependências externas. Requer Node.js 18 ou superior.
 //
 // Uso:  node server.mjs [--port 8080] [--host 127.0.0.1] [--allow-private] [--allow-host nome]
@@ -41,7 +41,7 @@ server.listen(PORT, HOST, () => {
       for (const i of list || []) if (i.family === 'IPv4' && !i.internal) urls.push(`http://${i.address}:${PORT}`);
     }
   } else urls.push(`http://${HOST}:${PORT}`);
-  console.log(`Sintonia ${VERSION} em execução:`);
+  console.log(`Vassole Smart Player IPTV ${VERSION} em execução:`);
   for (const u of urls) console.log(`  ${u}`);
   if (ALLOW_PRIVATE) console.log('Proxy com acesso a endereços locais e privados (--allow-private).');
   if (HOST !== '0.0.0.0') console.log('Para abrir em outros aparelhos da rede: node server.mjs --host 0.0.0.0');

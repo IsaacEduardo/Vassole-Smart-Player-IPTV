@@ -37,7 +37,7 @@ with sync_playwright() as p:
     page.on('pageerror', lambda e: errors.append(str(e)))
 
     page.goto(APP)
-    expect(page.locator('h1')).to_have_text('Bem-vindo ao Sintonia', timeout=10000)
+    expect(page.locator('h1')).to_have_text('Bem-vindo ao Vassole Smart Player IPTV', timeout=10000)
     page.screenshot(path=f'{SHOTS}/01-boas-vindas.png')
     ok('tela inicial sem playlist', True)
 

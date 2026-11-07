@@ -43,7 +43,8 @@ function parseHash() {
 function buildSidebar() {
   const sb = document.getElementById('sidebar');
   sb.replaceChildren(
-    h('div', { class: 'brand' }, h('span', { class: 'brand-mark' }), h('span', { class: 'brand-name' }, 'Sintonia')),
+    h('div', { class: 'brand', 'aria-label': 'Vassole Smart Player IPTV' }, h('span', { class: 'brand-mark' }),
+      h('span', { class: 'brand-name', 'aria-hidden': 'true' }, 'Vassole', h('span', { class: 'brand-sub' }, 'Smart Player IPTV'))),
     h('div', { class: 'nav', 'data-group': 'sidebar' }, NAV.map(([id, label, ic]) => h('button', {
       class: 'nav-btn', 'data-nav': id, onclick: () => { location.hash = `#/${id}`; },
     }, icon(ic), h('span', null, label)))),
@@ -158,7 +159,7 @@ async function autoUpdate() {
 }
 
 async function boot() {
-  document.addEventListener('db-blocked', () => toast('Feche as outras abas do Sintonia para concluir a atualização dos dados.', 10000));
+  document.addEventListener('db-blocked', () => toast('Feche as outras abas do Vassole Smart Player IPTV para concluir a atualização dos dados.', 10000));
   try {
     await openDB();
   } catch (e) {

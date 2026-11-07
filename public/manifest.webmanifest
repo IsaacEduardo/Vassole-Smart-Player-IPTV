@@ -1,7 +1,7 @@
 {
-  "name": "Sintonia",
-  "short_name": "Sintonia",
-  "description": "Player de IPTV para listas M3U e contas Xtream Codes.",
+  "name": "Vassole Smart Player IPTV",
+  "short_name": "Vassole IPTV",
+  "description": "Vassole Smart Player IPTV: player de IPTV para listas M3U e contas Xtream Codes.",
   "lang": "pt-BR",
   "start_url": "./#/home",
   "scope": "./",

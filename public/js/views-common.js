@@ -20,8 +20,8 @@ export const liveState = { cat: '__all', q: '', lang: '__all' };
 export function needPlaylist(root) {
   if (S.pl && S.data) return false;
   add(root, h('div', { class: 'empty' },
-    h('h1', null, S.playlists.length ? 'Nenhuma playlist ativa' : 'Bem-vindo ao Sintonia'),
-    h('p', { class: 'muted' }, 'O Sintonia reproduz as suas próprias fontes: listas M3U e contas Xtream Codes fornecidas pelo seu provedor. O app não inclui canais nem conteúdo.'),
+    h('h1', null, S.playlists.length ? 'Nenhuma playlist ativa' : 'Bem-vindo ao Vassole Smart Player IPTV'),
+    h('p', { class: 'muted' }, 'O Vassole Smart Player IPTV reproduz as suas próprias fontes: listas M3U e contas Xtream Codes fornecidas pelo seu provedor. O app não inclui canais nem conteúdo.'),
     h('button', { class: 'btn primary', 'data-autofocus': true, onclick: () => go('#/playlists/add') }, icon('plus'), 'Adicionar playlist'),
     S.playlists.length ? h('button', { class: 'btn', onclick: () => go('#/playlists') }, 'Escolher playlist') : null));
   return true;

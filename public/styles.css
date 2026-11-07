@@ -342,3 +342,6 @@ img.noimg { visibility: hidden; }
 .epg-hit .t { font-variant-numeric: tabular-nums; min-width: 7.5rem; color: var(--muted); }
 .epg-hit.on .t { color: var(--sel); font-weight: 700; }
 .ch-q { margin-left: .5rem; font-size: .72rem; font-weight: 700; color: var(--muted); border: 1px solid var(--line); border-radius: .3rem; padding: 0 .3rem; }
+/* Marca: "Vassole" em destaque e "Smart Player IPTV" abaixo */
+.brand-name { display: flex; flex-direction: column; line-height: 1.1; }
+.brand-sub { font-size: .68rem; font-weight: 700; letter-spacing: .04em; color: var(--muted); text-transform: uppercase; }

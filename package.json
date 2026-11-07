@@ -1,7 +1,7 @@
 {
-  "name": "sintonia",
+  "name": "vassole-smart-player-iptv",
   "version": "1.0.0",
-  "description": "Player de IPTV para listas M3U e contas Xtream Codes, sem ativação.",
+  "description": "Vassole Smart Player IPTV: player de IPTV para listas M3U e contas Xtream Codes, sem ativação.",
   "type": "module",
   "private": true,
   "engines": { "node": ">=18" },

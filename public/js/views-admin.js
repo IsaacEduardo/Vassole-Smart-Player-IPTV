@@ -16,7 +16,7 @@ export async function exportBackup() {
   const [playlists, favorites, hist, settings] = await Promise.all([db.getAll('playlists'), db.getAll('favorites'), db.getAll('history'), db.getAll('settings')]);
   const data = { app: 'sintonia', version: 1, exported: new Date().toISOString(), playlists: playlists.map(({ fileText, ...p }) => ({ ...p, fileText: fileText && fileText.length < 5e6 ? fileText : undefined })), favorites, history: hist, settings };
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
-  const a = h('a', { href: URL.createObjectURL(blob), download: `sintonia-backup-${new Date().toISOString().slice(0, 10)}.json` });
+  const a = h('a', { href: URL.createObjectURL(blob), download: `vassole-smart-player-iptv-backup-${new Date().toISOString().slice(0, 10)}.json` });
   document.body.append(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
 }
@@ -142,7 +142,7 @@ function playlistForm(existing) {
     const m = modal([
       h('h2', null, existing ? 'Editar playlist' : 'Adicionar playlist'),
       seg, fields, err,
-      h('p', { class: 'muted small' }, 'Os dados ficam somente neste aparelho. O Sintonia não fornece canais: use as fontes do seu provedor.'),
+      h('p', { class: 'muted small' }, 'Os dados ficam somente neste aparelho. O Vassole Smart Player IPTV não fornece canais: use as fontes do seu provedor.'),
       h('div', { class: 'row end' },
         h('button', { class: 'btn', onclick: () => m.close() }, 'Cancelar'),
         h('button', { class: 'btn primary', onclick: save }, existing ? 'Salvar' : 'Adicionar e carregar')),
@@ -246,7 +246,7 @@ export async function viewSettings(root) {
   };
   renderPrefs();
   const proxyStatus =h('span', null, S.proxyAvailable ? 'Servidor local detectado.' : 'Servidor local não detectado: sem proxy, a origem precisa permitir CORS e o app precisa estar em http.');
-  const ua = h('input', { class: 'input', value: st.ua || '', placeholder: 'Padrão: Sintonia/1.0', 'aria-label': 'User-Agent' });
+  const ua = h('input', { class: 'input', value: st.ua || '', placeholder: 'Padrão: VassoleSmartPlayer/1.0', 'aria-label': 'User-Agent' });
   ua.addEventListener('change', async () => { await setSetting('ua', ua.value.trim()); toast('User-Agent salvo'); });
   const importInput = h('input', { type: 'file', accept: 'application/json,.json', hidden: true });
   importInput.addEventListener('change', async () => {
@@ -254,7 +254,7 @@ export async function viewSettings(root) {
     if (!file) return;
     try {
       const data = JSON.parse(await file.text());
-      if (data.app !== 'sintonia') throw new Error('Arquivo não é um backup do Sintonia');
+      if (data.app !== 'sintonia') throw new Error('Arquivo não é um backup do Vassole Smart Player IPTV');
       if (!await confirmDialog('Importar backup?', `${data.playlists.length} playlists, ${data.favorites.length} favoritos. Itens com o mesmo identificador serão substituídos.`, 'Importar')) return;
       await db.putMany('playlists', data.playlists);
       await db.putMany('favorites', data.favorites || []);
@@ -345,7 +345,7 @@ export async function viewSettings(root) {
         location.hash = '#/home'; location.reload();
       } }, 'Apagar'))),
     section('Sobre',
-      h('p', { class: 'muted small' }, 'Sintonia 1.0 · player de IPTV de código próprio, gratuito e sem ativação. Reproduz listas M3U e contas Xtream Codes informadas pelo usuário. Não inclui, vende nem indica canais ou conteúdo; o usuário é responsável por ter direito de acesso às fontes que cadastrar.'),
+      h('p', { class: 'muted small' }, 'Vassole Smart Player IPTV 1.0 · player de IPTV de código próprio, gratuito e sem ativação. Reproduz listas M3U e contas Xtream Codes informadas pelo usuário. Não inclui, vende nem indica canais ou conteúdo; o usuário é responsável por ter direito de acesso às fontes que cadastrar.'),
       h('p', { class: 'muted small' }, 'Bibliotecas: hls.js e mpegts.js (Apache-2.0).')),
   );
   computeNet();
