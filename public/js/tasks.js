@@ -1,5 +1,6 @@
 // Execução das sincronizações no worker, com indicador de progresso.
 import { S } from './store.js';
+import { caps, BUNDLED } from './platform.js';
 
 let worker = null;
 let workerOk = null;
@@ -20,10 +21,12 @@ function onMsg(ev) {
 
 function ensureWorker() {
   if (workerOk !== null) return Promise.resolve(workerOk);
+  if (!caps.syncWorker) { workerOk = false; return Promise.resolve(false); }
   return new Promise((resolve) => {
     let t;
     try {
-      worker = new Worker('js/sync-worker.js', { type: 'module' });
+      // No pacote (build) o worker é um script clássico; servido pelo server.mjs, é um módulo.
+      worker = BUNDLED ? new Worker('js/sync-worker.js') : new Worker('js/sync-worker.js', { type: 'module' });
       t = setTimeout(() => { workerOk = false; resolve(false); }, 5000);
       worker.onmessage = (ev) => {
         if (ev.data.type === 'ready') { clearTimeout(t); workerOk = true; worker.onmessage = onMsg; resolve(true); }

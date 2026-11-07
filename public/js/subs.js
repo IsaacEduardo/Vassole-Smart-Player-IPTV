@@ -9,7 +9,7 @@ import { langOf } from './lang.js';
 import { decodeText, parseSubtitle, buildVtt, fmtOffset } from './subs-core.js';
 
 const T = {
-  video: null, hls: () => null, item: () => null, onUpdate: () => {},
+  video: null, engine: null, item: () => null, onUpdate: () => {},
   ext: null, // { cues, name, lang, offset, el, url }
   manualSubs: false, manualAudio: false, token: 0,
 };
@@ -19,8 +19,10 @@ const COLORS = { white: '#ffffff', yellow: '#ffe14d' };
 const BGS = { none: 'transparent', semi: 'rgba(0, 0, 0, .6)', solid: '#000000' };
 const LINE = { bottom: '', raised: '78%', top: '6%' };
 
-export function initTracks(video, { hls, item, onUpdate }) {
-  Object.assign(T, { video, hls, item, onUpdate });
+// engine: motor de reprodução (platform.js). As faixas do stream vêm dele; a legenda externa é
+// desenhada pelo app no próprio <video>.
+export function initTracks(video, { engine, item, onUpdate }) {
+  Object.assign(T, { video, engine, item, onUpdate });
   for (const list of [video.textTracks, video.audioTracks]) {
     if (!list?.addEventListener) continue;
     list.addEventListener('addtrack', () => { applyPrefs(); T.onUpdate(); });
@@ -81,15 +83,14 @@ function renderExternal(show) {
   x.el = h('track', { kind: 'subtitles', label: `Externa: ${x.name}`, src: x.url });
   if (x.lang) x.el.srclang = x.lang;
   T.video.append(x.el);
+  T.engine.markExternal(x.el.track);
   x.el.track.mode = show ? 'showing' : 'disabled';
   if (show) hideStreamSubs();
   T.onUpdate();
 }
 
 function hideStreamSubs() {
-  const hls = T.hls();
-  if (hls && hls.subtitleTracks.length) { hls.subtitleTrack = -1; hls.subtitleDisplay = false; }
-  for (const t of streamSubs()) if (t.mode === 'showing') t.mode = 'disabled';
+  if (T.engine.subtitleTracks().some((t) => t.active)) T.engine.setSubtitleTrack(-1);
 }
 
 async function persistExt() {
@@ -102,54 +103,32 @@ async function persistExt() {
 }
 
 // ---- Listas de faixas ----
-function streamSubs() {
-  return Array.from(T.video.textTracks || []).filter((t) => (t.kind === 'subtitles' || t.kind === 'captions') && t !== extTrack());
-}
-
 function streamSubOptions() {
-  const hls = T.hls();
   const on = extOn();
-  if (hls && hls.subtitleTracks.length) {
-    return hls.subtitleTracks.map((t, i) => ({ label: t.name || t.lang || `Legenda ${i + 1}`, value: `h${i}`, active: !on && hls.subtitleTrack === i && hls.subtitleDisplay !== false }));
-  }
-  return streamSubs().map((t, i) => ({ label: t.label || t.language || `Legenda ${i + 1}`, value: `n${i}`, active: !on && t.mode === 'showing' }));
+  return T.engine.subtitleTracks().map((t, i) => ({ label: t.label, value: `s${i}`, active: !on && t.active }));
 }
 
-export const hasStreamSubs = () => streamSubOptions().length > 0;
+export const hasStreamSubs = () => T.engine.subtitleTracks().length > 0;
 
 export function audioList() {
-  const hls = T.hls();
-  if (hls) return hls.audioTracks.map((t, i) => ({ label: t.name || t.lang || `Faixa ${i + 1}`, value: i, active: hls.audioTrack === i }));
-  const at = T.video.audioTracks;
-  if (at && at.length) return Array.from(at).map((t, i) => ({ label: t.label || t.language || `Faixa ${i + 1}`, value: i, active: t.enabled }));
-  return [];
+  return T.engine.audioTracks().map((t, i) => ({ label: t.label, value: i, active: t.active }));
 }
 
 // ---- Preferências de idioma ----
 export function applyPrefs() {
-  const hls = T.hls();
+  const E = T.engine;
   if (T.ext && extOn() && !T.manualSubs) hideStreamSubs();
   const aud = S.settings.audioLang;
   if (aud && !T.manualAudio) {
-    if (hls && hls.audioTracks.length > 1) {
-      const i = hls.audioTracks.findIndex((t) => langOf(t.lang, t.name) === aud);
-      if (i > -1 && hls.audioTrack !== i) hls.audioTrack = i;
-    } else if (T.video.audioTracks?.length > 1) {
-      const arr = Array.from(T.video.audioTracks);
-      const i = arr.findIndex((t) => langOf(t.language, t.label) === aud);
-      if (i > -1 && !arr[i].enabled) arr.forEach((t, j) => { t.enabled = j === i; });
-    }
+    const list = E.audioTracks();
+    const i = list.findIndex((t) => langOf(t.lang, t.name) === aud);
+    if (list.length > 1 && i > -1 && !list[i].active) E.setAudioTrack(i);
   }
   const sub = S.settings.subLang;
   if (sub && !T.manualSubs && !extOn()) {
-    if (hls && hls.subtitleTracks.length) {
-      const i = hls.subtitleTracks.findIndex((t) => langOf(t.lang, t.name) === sub);
-      if (i > -1 && hls.subtitleTrack !== i) { hls.subtitleTrack = i; hls.subtitleDisplay = true; }
-    } else {
-      const tt = streamSubs();
-      const i = tt.findIndex((t) => langOf(t.language, t.label) === sub);
-      if (i > -1 && tt[i].mode !== 'showing') tt.forEach((t, j) => { t.mode = j === i ? 'showing' : 'disabled'; });
-    }
+    const list = E.subtitleTracks();
+    const i = list.findIndex((t) => langOf(t.lang, t.name) === sub);
+    if (i > -1 && !list[i].active) E.setSubtitleTrack(i);
   }
 }
 
@@ -160,9 +139,7 @@ export async function pickAudio() {
   const v = await choose('Faixa de áudio', list);
   if (v === undefined) return;
   T.manualAudio = true;
-  const hls = T.hls();
-  if (hls) hls.audioTrack = v;
-  else Array.from(T.video.audioTracks).forEach((t, i) => { t.enabled = i === v; });
+  T.engine.setAudioTrack(v);
 }
 
 export async function pickSubs() {
@@ -195,16 +172,9 @@ export async function pickSubs() {
 }
 
 function selectSub(v) {
-  const hls = T.hls();
   const ext = extTrack();
   if (ext) ext.mode = v === 'ext' ? 'showing' : 'disabled';
-  if (hls && hls.subtitleTracks.length) {
-    const on = v[0] === 'h';
-    hls.subtitleTrack = on ? Number(v.slice(1)) : -1;
-    hls.subtitleDisplay = on;
-  } else {
-    streamSubs().forEach((t, i) => { t.mode = v === `n${i}` ? 'showing' : 'disabled'; });
-  }
+  T.engine.setSubtitleTrack(v[0] === 's' ? Number(v.slice(1)) : -1);
   T.onUpdate();
 }
 

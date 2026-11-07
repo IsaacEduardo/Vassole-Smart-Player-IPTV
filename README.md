@@ -1,130 +1,224 @@
 # Vassole Smart Player IPTV
 
-Player de IPTV próprio, gratuito e sem ativação. Reproduz listas M3U e contas Xtream Codes que o usuário cadastra. Não inclui, vende nem indica canais ou conteúdo.
+Player web de IPTV próprio, gratuito, leve e sem necessidade de ativação. Reproduz listas **M3U/M3U8** e contas **Xtream Codes** cadastradas pelo utilizador, com suporte a navegação espacial para controlo remoto (Smart TVs, TV Box) e rato/teclado.
 
-Código escrito do zero. Não reutiliza código, marca, ícones nem textos do IBO Player; apenas o modelo de uso (cadastrar a fonte do provedor e navegar por TV ao vivo, guia, filmes e séries) serviu de referência.
+> **Nota:** A aplicação é exclusivamente um reprodutor de mídia. Não inclui, fornece, vende nem indica canais, listas ou conteúdos. Código escrito do zero, sem dependências externas no servidor.
 
-## Como usar
+---
 
-Requisito: Node.js 18 ou superior. Não há dependências para instalar.
+## Como executar
 
-```
+**Requisito:** [Node.js](https://nodejs.org/) 18 ou superior (zero dependências de pacotes para execução).
+
+### Uso no computador (local)
+
+```bash
 node server.mjs
+# ou: npm start
 ```
 
-Abra `http://localhost:8080` no Chrome, Edge, Firefox ou Safari.
+Abra `http://localhost:8080` no navegador (Chrome, Edge, Firefox ou Safari).
 
-Para usar na TV ou no celular da mesma rede:
+### Uso na Smart TV, TV Box ou telemóvel (mesma rede local)
 
-```
+```bash
 node server.mjs --host 0.0.0.0
+# ou: npm run start:lan
 ```
 
-O terminal mostra o endereço (por exemplo `http://192.168.0.10:8080`). Abra esse endereço no navegador da TV. Opções:
+O terminal exibirá o endereço da máquina na rede local (ex.: `http://192.168.0.10:8080`). Basta abrir esse endereço no navegador da TV ou dispositivo móvel.
 
-| Opção | Efeito |
+### Opções do servidor
+
+Todas as opções podem ser passadas por linha de comando ou por variáveis de ambiente:
+
+| Argumento CLI | Variável de ambiente | Padrão | Descrição |
+|---|---|---|---|
+| `--port <número>` | `PORT` | `8080` | Porta HTTP do servidor. |
+| `--host <endereço>` | `HOST` | `127.0.0.1` | Interface de rede (`0.0.0.0` ou `::` expõe para a rede local). |
+| `--allow-private` | `ALLOW_PRIVATE=1` | Desativado | Permite que o proxy aceda a IPs locais/privados (`127.x`, `10.x`, `192.168.x`, etc.). Necessário para servidores na própria rede (ex.: Tvheadend) e para o provedor de testes (`npm run dev`). |
+| `--allow-host <nomes>` | `ALLOW_HOST` | — | Lista de domínios/nomes adicionais autorizados no cabeçalho `Host`, separados por vírgula (ex.: `--allow-host tv.casa,iptv.lan`). |
+| `--root <pasta>` | `ROOT` | `public` | Pasta servida no lugar de `public/` (ex.: `dist/browser`, para testar o build). |
+
+---
+
+## Arquitetura do servidor e proxy local
+
+Navegadores bloqueiam o acesso direto à maioria dos provedores IPTV devido à ausência de cabeçalhos CORS e ao bloqueio de conteúdo misto (`http` dentro de páginas `https`). O servidor local (`server.mjs`) resolve isso atuando em duas frentes:
+
+1. **Servidor estático:** entrega a aplicação (`public/`) e expõe o endpoint de verificação `GET /api/health`.
+2. **Proxy de mídia (`/proxy`):** encaminha pedidos de listas, guias (EPG) e streams.
+   - **Reescrita de HLS:** descompacta e reescreve manifestos `.m3u8` (`#EXT-X-`) para que sub-playlists, segmentos `.ts` e chaves de criptografia (`URI="..."`) também passem pelo proxy, preservando `User-Agent` e `Referer`.
+   - **Redirecionamentos e Range:** segue até 5 redirecionamentos HTTP (comum em balanceadores Xtream) e repassa cabeçalhos `Range` / `Content-Range` para avanço/recuo em VOD.
+
+### Segurança do proxy (`lib/netguard.mjs`)
+
+- **Isolamento de origem:** recusa requisições originadas de outros sites validando `Host`, `Origin` e `Sec-Fetch-Site`. Não emite cabeçalhos `Access-Control-Allow-Origin` abertos e protege contra ataques de *DNS rebinding*.
+- **Proteção contra SSRF:** bloqueia por padrão conexões e redirecionamentos para endereços de loopback, redes privadas (IPv4/IPv6, CGNAT, link-local, multicast e IPv4 mapeado em IPv6), validando o IP resolvido no momento do `dns.lookup` (evita *DNS rebinding* entre checagem e conexão).
+- **Prevenção de loop:** aceita apenas protocolos `http:` e `https:` e impede que o proxy aceda ao próprio servidor.
+
+---
+
+## Funcionalidades
+
+| Área | Recursos principais |
 |---|---|
-| `--port 8080` | Porta do servidor (padrão 8080). |
-| `--host 127.0.0.1` | Interface de rede (padrão `127.0.0.1`; `0.0.0.0` abre para a rede local). |
-| `--allow-private` | Permite que o proxy acesse endereços locais e da rede privada (`127.x`, `192.168.x`, `10.x` etc.). Necessário se o provedor estiver na sua própria rede (ex.: um servidor Tvheadend) e para o provedor de teste. Também por `ALLOW_PRIVATE=1`. |
-| `--allow-host nome` | Aceita abrir o app por outro nome além de `localhost`, dos IPs do computador e do nome da máquina (ex.: `--allow-host tv.casa`). |
+| **Fontes e Playlists** | Suporte a contas **Xtream Codes** (servidor, utilizador, senha), **links M3U** e **ficheiros M3U** locais. Converte links `get.php?username=…&password=…` em contas Xtream automaticamente. Lê cabeçalhos por canal (`#EXTVLCOPT:http-user-agent`, `#EXTVLCOPT:http-referrer`, `#EXTHTTP`, sufixo Kodi `\|User-Agent=…&Referer=…`) e `tvg-shift`. Suporta múltiplas playlists com sincronização em segundo plano (Web Worker). |
+| **TV ao Vivo** | Navegação por categorias, busca rápida, favoritos, pré-visualização com vídeo integrado, tela cheia, painel com programação atual/próxima e troca rápida de canal (setas, `Canal+/−` ou digitação numérica). Agrupa versões do mesmo canal (`SD`, `HD`, `FHD`, `4K`) numa única entrada, iniciando pela qualidade preferida e alternando automaticamente caso um stream falhe. |
+| **Guia (EPG)** | Leitura de XMLTV (`.xml` e `.xml.gz`) em fluxo (*streaming*), sem carregar o ficheiro inteiro em memória. Associação automática por `tvg-id` ou nome normalizado do canal, com fallback para `get_short_epg` em contas Xtream. Grade temporal de 6 horas com indicador de horário atual e seleção de idioma preferido. |
+| **Filmes e Séries (VOD)** | Filtro por categoria e idioma, ordenação (padrão, A–Z, recentes, avaliação), metadados via `get_vod_info` / `get_series_info` ou extração automática de temporadas/episódios (`S01E02`) em listas M3U. Retomada de reprodução de onde parou e reprodução automática do próximo episódio. Agrupa versões do mesmo título (Dublado, Legendado, Dual Áudio ou idiomas distintos) num único cartão. |
+| **Player de Vídeo** | Motores **HLS** (`hls.js`), **MPEG-TS** (`mpegts.js`) e **nativo** (`MP4`, `WebM`, `MKV`). Deteta o formato pelos primeiros bytes (`Range: bytes=0-2047`) quando a URL não possui extensão. Seleção de faixas de áudio, legendas do stream, níveis de qualidade/versões, velocidade de reprodução (`0,5×` a `2×` em VOD) e proporção de tela (*Ajustar*, *Preencher*, *Esticar*). Ocultação automática da barra e do cursor após 5 s. |
+| **Legendas Externas** | Carregamento de ficheiros ou links `.srt` e `.vtt` em filmes e séries. Deteção automática de codificação (`UTF-8`, `UTF-16 LE/BE` e `Windows-1252`), ajuste de sincronia em passos de `0,5 s`, personalização visual (tamanho, cor, fundo, posição) e persistência por filme/episódio no IndexedDB. |
+| **Idiomas** | Deteção automática por atributos (`tvg-language`, `tvg-country`), prefixos no nome (`PT:`, `[EN]`, `\|FR\|`, `ES -`, `EX-YU:`) e categorias (`BR: Brazil General`, `Movies Spanish`). Permite definir idiomas preferidos, ocultar outros idiomas e limpar prefixos de região dos nomes exibidos. |
+| **Categorias e Controlo Parental** | Organização de categorias em TV ao vivo, Filmes e Séries: reordenar, ocultar e bloquear com **PIN** (com atalho para bloquear categorias adultas). Itens bloqueados ficam ocultos de "Todos", da busca, do início e dos favoritos até o desbloqueio da sessão. |
+| **Início e Busca** | Tela inicial com trilhos *Continuar assistindo*, *Canais recentes* e *Canais favoritos*. Busca global insensível a maiúsculas e acentos abrangendo canais, filmes, séries e programas do guia (em exibição ou nas próximas 24 h). |
+| **Ajustes, Backup e PWA** | Configuração de proxy, `User-Agent`, formato ao vivo Xtream, ajuste de fuso do guia (`−3 h` a `+3 h`), atualização automática de lista e EPG, exportação/importação de backup em JSON e limpeza de dados. Instalável como **PWA** com cache offline da interface via Service Worker (`sw.js`). |
 
-### Por que existe um servidor local
+---
 
-Navegadores bloqueiam o acesso direto à maioria dos provedores: as respostas não têm cabeçalhos CORS e os streams costumam ser `http`. O `server.mjs` entrega o app e faz proxy de playlists, guias e streams. Nas playlists HLS, ele reescreve os endereços de segmentos e chaves e segue redirecionamentos (comum em painéis Xtream). O modo do proxy fica em Ajustes: Automático, Sempre ou Desligado.
+## Controlos (Teclado e Controlo Remoto)
 
-Proteções do proxy:
-
-- Só atende o próprio app: recusa pedidos vindos de outros sites (`Origin`, `Sec-Fetch-Site`) e com nome de servidor desconhecido (proteção contra DNS rebinding). Não envia cabeçalhos CORS.
-- Não acessa endereços locais ou privados, nem por redirecionamento. O endereço é verificado no momento da conexão. Use `--allow-private` para liberar.
-- Aceita apenas `http` e `https`, e nunca acessa o próprio servidor.
-
-## Funções
-
-| Área | O que faz |
+| Tecla (Teclado / Controlo Remoto) | Ação |
 |---|---|
-| Fontes | Conta Xtream Codes (servidor, usuário, senha), link M3U, arquivo M3U. Links `get.php?username=…&password=…` viram conta Xtream automaticamente. Várias playlists, uma ativa por vez. Nas listas M3U, cabeçalhos por canal (`#EXTVLCOPT:http-user-agent`/`http-referrer`, `#EXTHTTP`, `url|User-Agent=…&Referer=…`) e `tvg-shift`. |
-| Idiomas | Idioma detectado ao atualizar a lista: atributos `tvg-language`/`tvg-country`, prefixos de região no nome (`PT:`, `[EN]`, `|FR|`, `ES -`, `EX-YU:`) e nomes de idioma ou país na categoria (`Movies Spanish`, `BR: Brazil General`, `Bolivia`). Filtro de idioma em TV ao vivo, Guia, Filmes e Séries. Nos Ajustes: idiomas preferidos (aparecem primeiro), esconder os demais e mostrar os nomes sem o prefixo de região. |
-| TV ao vivo | Categorias, filtro, favoritos, prévia com reprodução, painel com programa atual e próximos, tela cheia, troca de canal por setas, Canal+/−, ou digitando o número. O mesmo canal em várias qualidades (SD, HD, FHD, 4K) vira uma só linha: começa pela maior (ou a mais leve, nos Ajustes) e, se a versão falhar, passa para a próxima sozinho. |
-| Categorias | Botão **Organizar** em TV ao vivo, Filmes e Séries (e nos Ajustes): ordenar, ocultar e bloquear com PIN, com atalho para bloquear as categorias adultas. Categorias bloqueadas aparecem com cadeado e pedem o PIN; os itens delas ficam fora de “Todos”, da busca e dos favoritos até serem liberados. |
-| Guia (EPG) | XMLTV (inclusive `.xml.gz`), lido em fluxo, sem carregar o arquivo inteiro na memória. Associação por `tvg-id` ou pelo nome do canal. Para Xtream sem XMLTV para o canal, usa `get_short_epg`. Grade de 6 horas com linha do horário atual. Em guias com vários idiomas, usa o título e a descrição no idioma preferido. |
-| Filmes | Categorias, filtro, ordenação (padrão, A–Z, recentes, nota), detalhes via `get_vod_info`, retomar de onde parou. Versões do mesmo título (dublado, legendado, dual áudio ou outro idioma, por `[DUB]`, `(LEG)`, `Dublado`, `Legendado`, `DUAL` ou pela categoria) aparecem num só cartão; a versão é escolhida ao abrir e pode ser trocada no detalhe. |
-| Séries | Temporadas e episódios via `get_series_info` ou montados a partir de nomes `S01E02` em listas M3U, progresso por episódio, próximo episódio automático. Versões agrupadas como nos filmes. |
-| Início | Continuar assistindo, canais recentes, favoritos. |
-| Busca | Canais, filmes, séries e programas do guia (em exibição ou nas próximas 24 h), sem diferenciar acentos e maiúsculas. |
-| Player | HLS (hls.js), MPEG-TS (mpegts.js) e nativo (MP4, WebM, MKV conforme o navegador). Detecta o formato pelo conteúdo quando o link não tem extensão. Faixas de áudio, legendas do stream, qualidade (níveis do HLS e versões do canal), velocidade em filmes e episódios (0,5× a 2×), proporção (ajustar, preencher, esticar). Barra de progresso operável pelo controle remoto. O cursor do mouse some junto com a barra. |
-| Legendas | Em filmes e episódios, legenda externa `.srt` ou `.vtt` carregada de um arquivo ou de um link (pelo botão de legendas do player). Codificação detectada (UTF-8, UTF-16 ou Windows-1252). Sincronia em passos de 0,5 s. A legenda e o ajuste ficam salvos por filme ou episódio e voltam ao reabrir. A legenda sobe quando a barra do player aparece. |
-| Ajustes | Proxy, User-Agent, formato ao vivo Xtream (HLS ou MPEG-TS), legendas (tamanho, cor, fundo, posição), idioma preferido de legenda e de áudio (aplicado quando o stream traz faixas nesse idioma), qualidade inicial dos canais, ajuste de horário do guia (−3 h a +3 h), controle parental (PIN), atualização automática da lista e do guia, backup e restauração em JSON, limpeza de dados. |
-| PWA | Instalável e abre sem rede (somente a interface) quando servido em `localhost` ou `https`. |
+| `Setas (↑ ↓ ← →)` | Navegação espacial entre elementos. Em tela cheia ao vivo (com barra oculta): `↑`/`↓` trocam de canal. Em VOD (barra oculta ou barra de progresso em foco): `←`/`→` recuam ou avançam 10 s. |
+| `Enter` / `OK` | Selecionar ou reproduzir. Num canal já em pré-visualização, abre em tela cheia. |
+| `Esc` / `Backspace` / `Voltar` (`Tizen 10009`, `webOS 461`) | Fecha diálogos, oculta a barra do player, sai da tela cheia para a pré-visualização ou retorna à barra lateral / ecrã anterior. Nos apps de TV, no ecrã Início, pergunta se deseja sair do app. |
+| `Espaço` / `Play/Pause` | Pausar ou retomar a reprodução. |
+| `Page Up` / `Page Down` / `Canal+` / `Canal−` | Canal anterior / próximo canal. |
+| `0–9` (TV ao vivo em tela cheia) | Mudar diretamente para o canal pelo número. |
 
-## Controles
+---
 
-| Tecla (teclado / controle remoto) | Ação |
-|---|---|
-| Setas | Navegar. Na tela cheia ao vivo, ↑/↓ trocam de canal; em filmes, ←/→ voltam ou avançam 10 s (também com a barra de progresso em foco) |
-| Enter / OK | Abrir ou reproduzir. Num canal já em prévia, abre a tela cheia |
-| Esc, Backspace, Voltar (Tizen 10009, webOS 461) | Voltar: fecha diálogo, esconde a barra do player, sai da tela cheia, volta ao menu |
-| Espaço, Play/Pause | Pausar e continuar |
-| Page Up / Page Down, Canal+ / Canal− | Trocar de canal |
-| 0–9 (ao vivo) | Ir para o canal pelo número |
+## Build para Android e Smart TVs
 
-## Limitações conhecidas
-
-- **Codecs:** a reprodução depende do navegador. HEVC/H.265 e áudio AC-3/E-AC-3 não funcionam na maioria dos navegadores de computador; nesses casos o player mostra o erro de codec.
-- **Navegadores de TV:** o app usa módulos JavaScript, IndexedDB e Media Source Extensions. Navegadores de TVs antigas podem não ter esses recursos. Não há pacote nativo Tizen (Samsung) ou webOS (LG) nesta versão.
-- **Legendas e faixas embutidas:** o Chrome e o Edge não expõem as legendas de texto nem as faixas de áudio extras gravadas dentro de arquivos MP4/MKV; nesses casos, use uma legenda externa. Legendas DVB e teletexto em streams MPEG-TS ao vivo não são exibidas. Legendas `.ass`/`.ssa` e arquivos `.zip` não são aceitos (extraia o `.srt`). As legendas externas não entram no backup.
-- **Cabeçalhos por canal:** o User-Agent e o Referer de cada canal só são aplicados com o proxy ativo (o navegador não deixa a página definir esses cabeçalhos).
-- **PIN:** é uma barreira para uso doméstico, guardada como hash neste aparelho. Quem tiver acesso ao navegador pode apagar os dados do app.
-- **Fora desta versão:** catch-up/arquivo, multi-tela, busca de legendas on-line, perfis.
-- **Segurança:** com `--host 0.0.0.0`, qualquer aparelho da rede local pode usar o proxy para acessar a internet (endereços privados continuam bloqueados, salvo com `--allow-private`). Use só em redes confiáveis. As credenciais ficam no IndexedDB do navegador, sem criptografia; o backup exportado também contém as credenciais.
-
-## Testes
-
-```
-npm run build:sw                          # depois de alterar arquivos em public/ (o npm test acusa se esquecer)
-npm test                                  # leitores, idiomas, legendas, proxy e lista do service worker
-node test/mock-provider.mjs &             # provedor simulado em 127.0.0.1:9100 (sem CORS)
-node server.mjs --allow-private &         # o provedor de teste é local, por isso --allow-private
-python3 test/e2e.py capturas              # 32 verificações no Chrome (Playwright)
+```bash
+npm run build                        # todas as plataformas: browser, android, tizen, webos
+node scripts/build.mjs tizen webos   # só as indicadas
+npm run build:dev                    # sem minificar, com source map (depuração na TV)
 ```
 
-O provedor simulado tem duas contas: `demo`/`demo` (dados básicos, usados pelo teste E2E) e `idiomas`/`idiomas` (os mesmos dados, mais canais com prefixo de região e um filme em versões dublada, legendada e em espanhol). A lista `http://127.0.0.1:9100/m3u/extras.m3u` testa cabeçalhos por canal (um canal só responde com o Referer e o User-Agent certos), `tvg-shift` e o mesmo canal em HD e SD; na conta `idiomas`, a versão FHD de “PT: RTP Teste” não responde, para testar a troca automática, e há uma categoria “Adultos” para testar o PIN. Usa vídeos de teste que devem estar em `test/media/` (gerados com ffmpeg; ver `test/media/README.txt`).
+Cada plataforma é gerada em `dist/<plataforma>/`:
 
-## Estrutura
+- `js/app.js` e `js/sync-worker.js` num ficheiro cada (sem ES Modules), convertidos para **Chromium 56** — Samsung Tizen 4.0 e LG webOS 4 (modelos de 2018) em diante. A plataforma fica gravada no próprio ficheiro (`window.__PLATFORM__`).
+- `hls.min.js` e `mpegts.js` passam pela mesma conversão; `styles.css` também (`inset` é expandido para `top/right/bottom/left`).
+- Fora do navegador, o realce de foco fica sempre visível (`:focus-visible` → `:focus`), o manifesto PWA e o Service Worker não são incluídos, e o app acede aos provedores diretamente, sem `server.mjs`.
+- `polyfills.js` completa o que falta nas TVs antigas (`replaceChildren`, `padStart`, `flat`, `matchAll`, `TextDecoderStream`).
 
+Para testar a saída no computador: `node server.mjs --root dist/browser --port 8081 --allow-private`.
+
+A camada `public/js/platform.js` deteta a plataforma (navegador, Android, Tizen, webOS), define o que cada uma permite (proxy, Web Worker, sair com Voltar), traduz as teclas do controlo remoto (incluindo o registo das teclas de mídia, números e coloridas na Samsung) e cria o motor de reprodução. Nesta versão todas as plataformas usam o motor web (`engine-web.js`: hls.js, mpegts.js e `<video>`); os motores nativos (ExoPlayer, AVPlay) e os pacotes `.apk`/`.wgt`/`.ipk` são as próximas etapas.
+
+---
+
+## Testes e desenvolvimento
+
+### Executar suíte de testes unitários e de integração
+
+```bash
+npm test
 ```
-server.mjs              linha de comando do servidor (sem dependências)
-scripts/build-sw.mjs    gera a lista de arquivos e a versão do service worker (npm run build:sw)
-lib/app.mjs             servidor estático + proxy
-lib/netguard.mjs        regras de segurança do proxy (origem, destinos bloqueados)
+
+O comando `npm test` executa em sequência:
+- `test/unit.mjs` — leitores M3U, XMLTV em fluxo, deteção de cabeçalhos por canal e normalização Xtream.
+- `test/lang.mjs` — deteção de idiomas, regiões, categorias e agrupamento de versões (dublado/legendado/dual).
+- `test/subs.mjs` — descodificação de texto (`UTF-8`/`UTF-16`/`Windows-1252`), parser SRT/VTT e ajuste de sincronia.
+- `test/proxy.mjs` — regras de bloqueio de IPs privados (`netguard`), proteção contra DNS rebinding/CORS, reescrita HLS e redirecionamentos do proxy.
+- `test/polyfills.mjs` — complementos para TVs antigas, com os métodos nativos removidos.
+- `test/build.mjs` — deteção de plataforma, teclas do controlo, e saída do build (sintaxe compatível com Chromium 56, script clássico, sem Service Worker, CSS convertido).
+- `scripts/build-sw.mjs --check` — verifica se a lista de ficheiros e o hash de versão em `public/sw.js` estão atualizados (se alterar ficheiros em `public/`, execute `npm run build:sw`).
+
+### Testes End-to-End (E2E) e provedor simulado
+
+```bash
+npm run mock                         # inicia o provedor simulado em http://127.0.0.1:9100
+npm run dev                          # inicia o servidor em http://127.0.0.1:8080 com --allow-private
+python3 test/e2e.py capturas         # executa 32 verificações no Chrome via Playwright
+```
+
+O provedor simulado (`test/mock-provider.mjs`) disponibiliza:
+- Conta `demo` / `demo`: canais ao vivo, filmes, séries, guia XMLTV compactado (`.xml.gz`) e guia curto Xtream.
+- Conta `idiomas` / `idiomas`: canais com prefixos de idioma, fallback automático de qualidade (`FHD` inativo → `SD/HD`), filmes em versões `[DUB]`/`[LEG]`/espanhol e categoria `Adultos` para teste de PIN.
+- Lista `http://127.0.0.1:9100/m3u/extras.m3u`: testa cabeçalhos exigidos por canal (`Referer` e `User-Agent`), `tvg-shift` e canais com múltiplas qualidades.
+- Legendas de teste em `/subs/oceano.srt` (`Windows-1252`) e `/subs/oceano.vtt` (`UTF-8`).
+- Mídias de teste em `test/media/` (comandos `ffmpeg` documentados em `test/media/README.txt`).
+
+---
+
+## Estrutura do projeto
+
+```text
+server.mjs                Entrada CLI do servidor HTTP (Node 18+, zero dependências)
+scripts/
+  build-sw.mjs            Gera a lista de ficheiros (SHELL) e o hash de versão do Service Worker
+  build.mjs               Gera dist/<plataforma>/ (esbuild, alvo Chromium 56)
+lib/
+  app.mjs                 Servidor estático, endpoint /api/health e proxy com reescrita HLS
+  netguard.mjs            Segurança do proxy (validação de origem/Host e bloqueio de IPs privados/SSRF)
 public/
-  index.html, styles.css, sw.js, manifest.webmanifest
-  js/app.js             inicialização, rotas, teclas
-  js/views-common.js    partes compartilhadas das telas (cartões, categorias, limpeza)
-  js/views-home.js      Início
-  js/views-live.js      TV ao vivo
-  js/views-guide.js     Guia
-  js/views-vod.js       Filmes e Séries (grade)
-  js/views-detail.js    detalhe de filme e de série
-  js/views-search.js    Busca
-  js/views-admin.js     Playlists, Ajustes e backup
-  js/views-cats.js      organizar categorias (ordem, ocultar, bloquear)
-  js/pin.js             PIN do controle parental
-  js/player.js          player e barra de controles
-  js/player-menus.js    menus de qualidade e velocidade
-  js/subs.js            legendas e faixas de áudio no player (menus, legenda externa, sincronia, aparência)
-  js/subs-core.js       leitura de SRT/VTT, codificação e ajuste de tempo (sem DOM, testável)
-  js/lang.js            idiomas: nomes, códigos, detecção por prefixo/categoria e versões dublada/legendada
-  js/nav.js             navegação espacial por setas
-  js/store.js           estado, favoritos, histórico, guia
-  js/db.js              IndexedDB, com migrações por versão (MIGRATIONS)
-  js/m3u.js, xtream.js, xmltv.js   leitores das fontes
-  js/sync.js, sync-worker.js, tasks.js   sincronização em segundo plano
-  vendor/               hls.js 1.7.4 e mpegts.js 1.8.2 (Apache-2.0)
-  fonts/                Atkinson Hyperlegible (SIL OFL 1.1)
-test/                   testes e provedor simulado
+  index.html              Estrutura principal da SPA
+  styles.css              Estilos e layout responsivo / TV
+  manifest.webmanifest    Manifesto PWA
+  sw.js                   Service Worker para cache offline da interface
+  icons/                  Ícones da aplicação (SVG, PNG 192/512 e maskable)
+  fonts/                  Fonte Atkinson Hyperlegible (SIL OFL 1.1)
+  vendor/                 hls.min.js 1.7.4 e mpegts.js 1.8.2 (Apache-2.0)
+  js/
+    app.js                Inicialização, roteamento por hash, atalhos de teclado/controlo remoto e auto-update
+    platform.js           Plataforma (navegador/Android/Tizen/webOS), capacidades, teclas e motor de reprodução
+    engine-web.js         Motor de reprodução web: hls.js, mpegts.js e <video>, com recuperação de erros
+    polyfills.js          Complementos para navegadores de TV antigos
+    db.js                 Armazenamento local em IndexedDB com migrações de esquema
+    store.js              Estado global, playlists, favoritos, histórico, progresso e associação de EPG
+    net.js                Cliente HTTP (roteamento via /proxy e descompactação de streams gzip)
+    ui.js                 Utilitários de DOM, ícones SVG, modais, toasts e renderização paginada (chunked)
+    util.js               Normalização de texto/canais, ranking de qualidade, hash e entidades HTML/Base64
+    nav.js                Motor de navegação espacial 2D por setas
+    lang.js               Deteção de idiomas por atributo/prefixo/categoria e agrupamento de versões VOD
+    pin.js                Controlo parental e verificação de PIN (guardado como hash)
+    m3u.js                Parser de listas M3U/M3U8 e extração de episódios/cabeçalhos
+    xtream.js             Cliente da API Xtream Codes e conversor de links get.php
+    xmltv.js              Parser XMLTV em fluxo (ReadableStream)
+    sync.js               Coordenação de sincronização de playlists e EPG
+    sync-worker.js        Web Worker para leitura e processamento de listas em segundo plano
+    tasks.js              Gestão de tarefas em segundo plano e indicador visual de progresso
+    player.js             Controlador do player (OSD, pré-visualização, troca de canal e fallback de versões)
+    player-menus.js       Menus de seleção de qualidade/versão e velocidade de reprodução
+    subs.js               Gestão de faixas de áudio e legendas (embutidas e externas) no player
+    subs-core.js          Parser SRT/VTT, deteção de codificação e ajuste de tempo (sem DOM)
+    views-common.js       Componentes partilhados entre ecrãs (cartões, barras de filtro, limpeza)
+    views-home.js         Ecrã Início (Continuar assistindo, Recentes, Favoritos)
+    views-live.js         Ecrã TV ao vivo (categorias, lista, pré-visualização e EPG lateral)
+    views-guide.js        Ecrã Guia de programação (grade de 6 horas)
+    views-vod.js          Grelha de Filmes e Séries
+    views-detail.js       Detalhes de Filme e Série (temporadas, episódios e escolha de versão)
+    views-search.js       Busca global (canais, VOD e programas do guia)
+    views-admin.js        Gestão de Playlists, Ajustes e exportação/importação de Backup
+    views-cats.js         Modal de organização de categorias (ordenar, ocultar e bloquear)
+test/
+  unit.mjs                Testes de M3U, XMLTV e Xtream
+  lang.mjs                Testes de deteção de idiomas e versões
+  subs.mjs                Testes de legendas e codificação de caracteres
+  proxy.mjs               Testes de segurança e integração do servidor/proxy
+  polyfills.mjs           Testes dos complementos para TVs antigas
+  build.mjs               Testes do build e da camada de plataforma
+  mock-provider.mjs       Servidor Xtream/M3U/XMLTV simulado para desenvolvimento e testes
+  e2e.py                  Testes ponta a ponta automatizados com Playwright
+  media/                  Streams e vídeos de teste (HLS, MPEG-TS e MP4)
 ```
+
+---
+
+## Limitações conhecidas e segurança
+
+- **Suporte a codecs:** a descodificação de vídeo e áudio depende do navegador. Vídeo **HEVC (H.265)** e áudio **AC-3 / E-AC-3** não são suportados na maioria dos navegadores de computador; quando ocorrem, o player informa erro de codec.
+- **Faixas embutidas em MP4/MKV:** navegadores baseados em Chromium (Chrome, Edge) geralmente não expõem faixas de legendas de texto nem faixas de áudio secundárias embutidas em contentores MP4/MKV na reprodução nativa — nesses casos, carregue uma legenda externa `.srt` ou `.vtt`. Legendas DVB/teletexto em MPEG-TS ao vivo e ficheiros `.ass`/`.ssa` ou `.zip` não são suportados.
+- **Cabeçalhos por canal:** o envio de `User-Agent` e `Referer` específicos de um canal exige que o proxy local esteja ativo (os navegadores bloqueiam a alteração direta desses cabeçalhos via `fetch`).
+- **Compatibilidade em Smart TVs:** aberto pelo navegador da TV (via `server.mjs`), requer suporte a ES Modules, IndexedDB e Media Source Extensions (MSE). O build (`npm run build`) gera uma versão para Chromium 56+ (TVs de 2018 em diante); nessas TVs mais antigas, o espaçamento entre alguns elementos pode ficar menor (sem `gap` em flexbox antes do Chromium 84) e guias `.xml.gz` exigem Chromium 80+ (use o endereço `.xml`). Os pacotes instaláveis (`.apk`, `.wgt`, `.ipk`) ainda não estão incluídos.
+- **Escopo atual:** não inclui *catch-up* / gravação (timeshift), multi-ecrã, pesquisa online de legendas nem múltiplos perfis de utilizador.
+- **Segurança na rede local e dados:** ao iniciar com `--host 0.0.0.0`, qualquer dispositivo na mesma rede local pode utilizar o proxy para aceder à internet (IPs privados permanecem bloqueados, exceto com `--allow-private`). Utilize apenas em redes domésticas confiáveis. As credenciais das listas ficam guardadas no IndexedDB do navegador e nos ficheiros JSON de backup em texto simples; o PIN parental é guardado como hash simples (FNV-1a), adequado só como barreira de uso doméstico.
+
+---
 
 ## Responsabilidade
 
-O Vassole Smart Player IPTV é um reprodutor de mídia. O usuário é responsável por ter direito de acesso às fontes que cadastrar.
+O **Vassole Smart Player IPTV** é apenas um reprodutor de mídia de código aberto. O utilizador é inteiramente responsável por possuir o direito legal de acesso às listas e fontes que cadastrar na aplicação.

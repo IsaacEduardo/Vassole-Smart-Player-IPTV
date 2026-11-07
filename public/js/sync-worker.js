@@ -1,3 +1,4 @@
+import './polyfills.js';
 import { syncPlaylist, syncEpg } from './sync.js';
 
 self.onmessage = async (ev) => {

@@ -2,6 +2,7 @@
 import * as db from './db.js';
 import { Xtream } from './xtream.js';
 import { itemKey, b64utf8, normChannel, channelQuality } from './util.js';
+import { caps } from './platform.js';
 
 export const DEFAULTS = {
   proxyMode: 'auto',      // auto | on | off
@@ -43,6 +44,8 @@ export function onChange(fn) { S.listeners.add(fn); return () => S.listeners.del
 export function emit(what) { for (const fn of S.listeners) fn(what); }
 
 export async function detectProxy() {
+  // Fora do navegador não há server.mjs: os apps acessam os provedores diretamente.
+  if (!caps.proxy) { S.proxyAvailable = false; computeNet(); return; }
   try {
     const r = await fetch('/api/health', { cache: 'no-store' });
     const j = await r.json();
@@ -53,7 +56,7 @@ export async function detectProxy() {
 
 export function computeNet() {
   const m = S.settings.proxyMode;
-  S.net = { proxy: m === 'on' || (m === 'auto' && S.proxyAvailable), ua: S.settings.ua || '', base: location.origin };
+  S.net = { proxy: caps.proxy && (m === 'on' || (m === 'auto' && S.proxyAvailable)), ua: S.settings.ua || '', base: location.origin };
 }
 
 export async function loadSettings() {

@@ -202,19 +202,6 @@ export function chunked(container, items, render, { size = 120, root = null } = 
   };
 }
 
-const scripts = new Map();
-export function loadScript(src) {
-  if (!scripts.has(src)) {
-    scripts.set(src, new Promise((res, rej) => {
-      const s = document.createElement('script');
-      s.src = src;
-      s.onload = res;
-      s.onerror = () => { scripts.delete(src); rej(new Error(`Falha ao carregar ${src}`)); };
-      document.head.appendChild(s);
-    }));
-  }
-  return scripts.get(src);
-}
 
 export function debounce(fn, ms) {
   let t;

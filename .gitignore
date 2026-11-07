@@ -8,3 +8,4 @@ capturas/
 __pycache__/
 # configuração local do Claude Code
 .claude/
+dist/

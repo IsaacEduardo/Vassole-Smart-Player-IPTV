@@ -1,6 +1,8 @@
+import './polyfills.js';
 import { openDB } from './db.js';
+import { caps, keyName, registerKeys, exitApp } from './platform.js';
 import { S, loadSettings, detectProxy, loadPlaylists, activate, onChange } from './store.js';
-import { h, icon, closeTopModal, toast } from './ui.js';
+import { h, icon, closeTopModal, toast, confirmDialog } from './ui.js';
 import { move, focusFirst, focusEl, currentScope } from './nav.js';
 import * as player from './player.js';
 import { cleanups } from './views-common.js';
@@ -91,27 +93,13 @@ function goBack() {
     focusEl(document.querySelector(`.nav-btn[data-nav="${ROUTES[name].nav}"]`));
     return;
   }
-  if (name !== 'home') location.hash = '#/home';
-}
-
-const KEYCODES = { 10009: 'back', 461: 'back', 8: null, 415: 'playpause', 19: 'playpause', 10252: 'playpause', 427: 'chup', 428: 'chdown' };
-function keyName(e) {
-  if (KEYCODES[e.keyCode]) return KEYCODES[e.keyCode];
-  switch (e.key) {
-    case 'ArrowUp': return 'up';
-    case 'ArrowDown': return 'down';
-    case 'ArrowLeft': return 'left';
-    case 'ArrowRight': return 'right';
-    case 'Enter': return 'enter';
-    case 'Escape': case 'GoBack': case 'BrowserBack': return 'back';
-    case 'Backspace': return 'backspace';
-    case 'MediaPlayPause': case 'MediaPlay': case 'MediaPause': return 'playpause';
-    case ' ': return 'space';
-    case 'PageUp': case 'ChannelUp': return 'chup';
-    case 'PageDown': case 'ChannelDown': return 'chdown';
-    default: return /^\d$/.test(e.key) ? e.key : null;
+  if (name !== 'home') { location.hash = '#/home'; return; }
+  // Nas TVs, Voltar no Início fecha o app (como pedem as lojas da Samsung e da LG).
+  if (caps.exitOnBack && !document.querySelector('.modal')) {
+    confirmDialog('Sair do app?', null, 'Sair').then((ok) => { if (ok) exitApp(); });
   }
 }
+
 const isText = (el) => el && (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !['button', 'checkbox', 'radio', 'file'].includes(el.type)));
 
 document.addEventListener('keydown', (e) => {
@@ -175,8 +163,9 @@ async function boot() {
   player.initPlayer();
   onChange((w) => { if (w === 'playlist') document.getElementById('sb-pl').textContent = S.pl ? S.pl.name : ''; });
   await render();
-  if (location.protocol === 'https:' && !S.net.proxy) toast('Aviso: em https, streams http são bloqueados pelo navegador. Use o servidor local.', 7000);
-  if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('sw.js').catch(() => {});
+  registerKeys();
+  if (caps.proxy && location.protocol === 'https:' && !S.net.proxy) toast('Aviso: em https, streams http são bloqueados pelo navegador. Use o servidor local.', 7000);
+  if (caps.serviceWorker && 'serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('sw.js').catch(() => {});
   setTimeout(autoUpdate, 1500);
 }
 boot();

@@ -1,17 +1,18 @@
-// Player: HLS (hls.js), MPEG-TS (mpegts.js) e reprodução nativa (MP4/WebM/MKV conforme o navegador).
+// Player: tela, barra de controles, canais e progresso. A reprodução fica no motor da plataforma
+// (platform.js → engine-web.js no navegador: hls.js, mpegts.js e <video>).
 import { S, streamUrl, epgWithFallback, nowNext, saveHistory, getProgress, toggleFav, isFav, setSetting, emit, displayName, itemNet, preferredVariant, variantsOf } from './store.js';
-import { h, icon, fmtClock, fmtTime, toast, choose, loadScript } from './ui.js';
-import { toNet } from './net.js';
+import { h, icon, fmtClock, fmtTime, toast, choose } from './ui.js';
+import { createEngine, caps } from './platform.js';
 import { pushScope, popScope, focusEl } from './nav.js';
 import { initTracks, onItem, clearTracks, applyPrefs, audioList, hasStreamSubs, pickAudio, pickSubs } from './subs.js';
 import { qualityAvailable, pickQuality, pickSpeed } from './player-menus.js';
 
 const P = {
-  token: 0, mode: 'closed', item: null, ctx: {}, live: false, hls: null, mts: null,
-  retry: 0, osdTimer: 0, lastSave: 0, home: null, num: '', numTimer: 0,
+  token: 0, mode: 'closed', item: null, ctx: {}, live: false,
+  osdTimer: 0, lastSave: 0, home: null, num: '', numTimer: 0,
   rate: 1, tried: new Set(), // velocidade (filmes/episódios); versões do canal já tentadas
 };
-let root; let stage; let video; let osd; let el = {};
+let root; let stage; let video; let media; let engine; let osd; let el = {};
 
 const scopeFn = () => (P.mode === 'full' ? root : null);
 const ASPECTS = [['contain', 'Ajustar'], ['cover', 'Preencher'], ['fill', 'Esticar']];
@@ -20,6 +21,13 @@ export function initPlayer() {
   root = document.getElementById('player');
   video = h('video', { playsinline: true, preload: 'auto' });
   video.setAttribute('playsinline', '');
+  engine = createEngine(video, {
+    onError: (msg) => fail(msg),
+    onBlocked: () => showError('O navegador bloqueou a reprodução automática.', true),
+    onTracks: () => { applyPrefs(); updateTrackButtons(); },
+    onReload: () => { if (P.item) play(P.item, { ...P.ctx, resume: true, keepRetry: true, exact: true, fallback: true }); },
+  });
+  media = engine.media;
   el.spinner = h('div', { class: 'spinner', hidden: true });
   el.err = h('div', { class: 'perr', hidden: true });
   stage = h('div', { class: 'stage', onclick: () => { if (P.mode === 'preview') toFull(); } }, video, el.spinner, el.err);
@@ -34,7 +42,7 @@ export function initPlayer() {
   el.bar = h('div', { class: 'bar', role: 'slider', tabindex: '0', 'data-f': '', 'aria-label': 'Posição', 'aria-valuemin': '0', onclick: (e) => {
     if (e.detail === 0) return; // "clique" vindo do Enter: não há posição
     const r = e.currentTarget.getBoundingClientRect();
-    if (Number.isFinite(video.duration)) video.currentTime = ((e.clientX - r.left) / r.width) * video.duration;
+    if (Number.isFinite(media.duration)) media.currentTime = ((e.clientX - r.left) / r.width) * media.duration;
   } }, el.fill);
   el.prog = h('div', { class: 'osd-prog' }, el.cur, el.bar, el.dur);
   const btn = (name, label, fn, cls = '') => h('button', { class: `obtn ${cls}`, 'aria-label': label, title: label, onclick: fn }, icon(name));
@@ -44,12 +52,12 @@ export function initPlayer() {
   el.bFwd = btn('fwd10', 'Avançar 10 s', () => seek(10), 'vod-only');
   el.bNext = btn('down', 'Próximo canal', () => zap(1), 'live-only');
   const replay = (it) => play(it, { ...P.ctx, mode: P.mode === 'full' ? 'full' : 'preview', mount: P.home, exact: true });
-  el.bQuality = btn('quality', 'Qualidade', () => pickQuality(P.hls, P.item, replay));
+  el.bQuality = btn('quality', 'Qualidade', () => pickQuality(engine, P.item, replay));
   el.bSpeed = btn('speed', 'Velocidade', async () => {
     const r = await pickSpeed(P.rate);
     if (r === undefined) return;
     P.rate = r;
-    video.playbackRate = r;
+    media.playbackRate = r;
     toast(r === 1 ? 'Velocidade normal' : `Velocidade ${String(r).replace('.', ',')}×`);
   }, 'vod-only');
   el.bAudio = btn('audio', 'Áudio', pickAudio);
@@ -62,10 +70,12 @@ export function initPlayer() {
     toast(on ? 'Adicionado aos favoritos' : 'Removido dos favoritos');
   });
   el.bFull = btn('full', 'Tela cheia do navegador', () => {
+    if (!caps.browserFullscreen) return;
     if (document.fullscreenElement) document.exitFullscreen?.();
     else document.documentElement.requestFullscreen?.().catch(() => {});
   });
   el.bClose = btn('close', 'Fechar', () => close());
+  el.bFull.hidden = !caps.browserFullscreen; // apps de TV já ocupam a tela inteira
   el.num = h('div', { class: 'numbox', hidden: true });
 
   osd = h('div', { class: 'osd' },
@@ -77,23 +87,18 @@ export function initPlayer() {
   root.append(osd, el.num);
   root.addEventListener('mousemove', () => { if (P.mode === 'full') showOsd(false); });
 
-  video.addEventListener('playing', () => {
-    spin(false); el.err.hidden = true; P.retry = 0; updatePlayIcon();
+  media.addEventListener('playing', () => {
+    spin(false); el.err.hidden = true; updatePlayIcon();
     const rate = P.live ? 1 : P.rate;
-    if (video.playbackRate !== rate) video.playbackRate = rate;
+    if (media.playbackRate !== rate) media.playbackRate = rate;
   });
-  video.addEventListener('pause', () => { updatePlayIcon(); persist(true); if (P.mode === 'full') showOsd(false); });
-  video.addEventListener('waiting', () => spin(true));
-  video.addEventListener('canplay', () => spin(false));
-  video.addEventListener('timeupdate', onTime);
-  video.addEventListener('ended', onEnded);
-  video.addEventListener('error', () => {
-    if (P.hls || P.mts || !P.item) return;
-    const c = video.error?.code;
-    fail(c === 4 ? 'Formato ou codec não suportado por este navegador.' : c === 3 ? 'Erro ao decodificar o vídeo.' : 'Não foi possível carregar o vídeo.');
-  });
+  media.addEventListener('pause', () => { updatePlayIcon(); persist(true); if (P.mode === 'full') showOsd(false); });
+  media.addEventListener('waiting', () => spin(true));
+  media.addEventListener('canplay', () => spin(false));
+  media.addEventListener('timeupdate', onTime);
+  media.addEventListener('ended', onEnded);
   setInterval(() => { if (P.mode === 'full') el.clock.textContent = fmtClock(Date.now()); }, 15000);
-  initTracks(video, { hls: () => P.hls, item: () => P.item, onUpdate: updateTrackButtons });
+  initTracks(video, { engine, item: () => P.item, onUpdate: updateTrackButtons });
   applyAspect();
 }
 
@@ -105,7 +110,7 @@ function spin(on) { el.spinner.hidden = !on; }
 function showError(msg, clickToPlay = false) {
   spin(false);
   el.err.replaceChildren(h('div', null, msg),
-    clickToPlay ? h('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); el.err.hidden = true; video.play().catch(() => {}); } }, 'Reproduzir')
+    clickToPlay ? h('button', { class: 'btn primary', onclick: (e) => { e.stopPropagation(); el.err.hidden = true; engine.play(); } }, 'Reproduzir')
       : h('button', { class: 'btn', onclick: (e) => { e.stopPropagation(); retryNow(); } }, 'Tentar de novo'));
   el.err.hidden = false;
   if (P.mode === 'full') requestAnimationFrame(() => focusEl(el.err.querySelector('button')));
@@ -125,128 +130,14 @@ function fail(msg) {
   play(next, { ...P.ctx, mode: P.mode === 'full' ? 'full' : 'preview', mount: P.home, exact: true, fallback: true });
 }
 
-function teardown() {
-  if (P.hls) { try { P.hls.destroy(); } catch { /* */ } P.hls = null; }
-  if (P.mts) {
-    try { P.mts.pause(); P.mts.unload(); P.mts.detachMediaElement(); P.mts.destroy(); } catch { /* */ }
-    P.mts = null;
-  }
-  video.removeAttribute('src');
-  try { video.load(); } catch { /* */ }
-}
+function tryPlay() { engine.play(); }
 
-async function pickEngine(url, live, net) {
-  let path = url.toLowerCase();
-  try { path = new URL(url).pathname.toLowerCase(); } catch { /* */ }
-  if (/\.m3u8?$/.test(path)) return 'hls';
-  if (/\.ts$/.test(path)) return 'mpegts';
-  if (/\.(mp4|m4v|webm|mov|mkv|ogv|mp3|aac|m4a)$/.test(path)) return 'native';
-  // Extensão desconhecida: lê os primeiros bytes para decidir.
-  const ac = new AbortController();
-  const t = setTimeout(() => ac.abort(), 8000);
-  try {
-    const r = await fetch(toNet(url, net), { signal: ac.signal, headers: { Range: 'bytes=0-2047' } });
-    const ct = r.headers.get('content-type') || '';
-    const { value } = await r.body.getReader().read();
-    ac.abort();
-    if (/mpegurl/i.test(ct)) return 'hls';
-    if (value && new TextDecoder().decode(value.slice(0, 32)).includes('#EXTM3U')) return 'hls';
-    if (value && value[0] === 0x47) return 'mpegts';
-    if (/mp2t/i.test(ct)) return 'mpegts';
-    if (/^(video|audio)\//i.test(ct)) return 'native';
-  } catch { /* segue o padrão */ } finally { clearTimeout(t); }
-  return live ? 'mpegts' : 'native';
-}
-
-function tryPlay() {
-  const pr = video.play();
-  if (pr) pr.catch((e) => { if (e.name === 'NotAllowedError') showError('O navegador bloqueou a reprodução automática.', true); });
-}
-
-async function load(url, live, startAt, token) {
-  teardown();
+async function load(url, live, startAt, token, keepRetry) {
   spin(true);
   el.err.hidden = true;
-  const net = itemNet(P.item); // User-Agent/Referer do canal, quando a lista os define
-  const engine = await pickEngine(url, live, net);
   if (token !== P.token) return;
-  const src = toNet(url, net);
-  P.engine = engine;
-  try {
-    if (engine === 'hls') {
-      await loadScript('vendor/hls.min.js');
-      if (token !== P.token) return;
-      const Hls = window.Hls;
-      if (Hls && Hls.isSupported()) {
-        const hls = new Hls({ enableWorker: true, backBufferLength: live ? 10 : 60, maxBufferLength: 30, liveDurationInfinity: true, startPosition: startAt || -1 });
-        P.hls = hls;
-        hls.on(Hls.Events.ERROR, (_, d) => onHlsError(d, token));
-        hls.on(Hls.Events.MANIFEST_PARSED, () => { tryPlay(); updateTrackButtons(); });
-        const tracksChanged = () => { applyPrefs(); updateTrackButtons(); };
-        hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, tracksChanged);
-        hls.on(Hls.Events.SUBTITLE_TRACKS_UPDATED, tracksChanged);
-        hls.loadSource(src);
-        hls.attachMedia(video);
-        return;
-      }
-      if (!video.canPlayType('application/vnd.apple.mpegurl')) throw new Error('Este navegador não reproduz HLS.');
-    } else if (engine === 'mpegts') {
-      await loadScript('vendor/mpegts.js');
-      if (token !== P.token) return;
-      const m = window.mpegts;
-      if (m && m.getFeatureList().mseLivePlayback) {
-        const p = m.createPlayer({ type: 'mpegts', isLive: live, url: src }, {
-          enableWorker: true, lazyLoad: false, liveBufferLatencyChasing: live, autoCleanupSourceBuffer: true,
-        });
-        P.mts = p;
-        p.on(m.Events.ERROR, (type, detail) => onMtsError(type, detail, token));
-        p.attachMediaElement(video);
-        p.load();
-        tryPlay();
-        return;
-      }
-    }
-    video.src = src;
-    if (startAt) video.addEventListener('loadedmetadata', () => { video.currentTime = startAt; }, { once: true });
-    tryPlay();
-  } catch (e) {
-    fail(e.message);
-  }
-}
-
-function onHlsError(d, token) {
-  if (token !== P.token || !d.fatal) return;
-  const Hls = window.Hls;
-  // Manifesto que não carregou: startLoad() não o pede de novo. Erro 4xx falha na hora (e passa
-  // para outra versão do canal); outros erros (rede, tempo esgotado) recarregam o stream uma vez.
-  if (/manifest/i.test(d.details || '')) {
-    const code = d.response?.code || 0;
-    if (!(code >= 400 && code < 500) && P.retry < 1) {
-      P.retry++;
-      setTimeout(() => { if (token === P.token) play(P.item, { ...P.ctx, resume: true, keepRetry: true, exact: true, fallback: true }); }, 1500);
-      return;
-    }
-  } else if (d.type === Hls.ErrorTypes.NETWORK_ERROR && P.retry < 3) {
-    P.retry++;
-    setTimeout(() => { if (token === P.token && P.hls) P.hls.startLoad(); }, 1200 * P.retry);
-    return;
-  }
-  if (d.type === Hls.ErrorTypes.MEDIA_ERROR && P.retry < 2) { P.retry++; P.hls.recoverMediaError(); return; }
-  const codec = /codec|incompatible/i.test(d.details || '');
-  const manifest = /manifest/i.test(d.details || '');
-  fail(codec ? 'Codec não suportado por este navegador (ex.: HEVC ou AC-3).'
-    : manifest ? `O stream não respondeu (${d.response?.code || d.details}). Verifique a conta, o proxy ou o formato ao vivo nos Ajustes.`
-      : `Falha na reprodução (${d.details}).`);
-}
-
-function onMtsError(type, detail, token) {
-  if (token !== P.token) return;
-  if (P.retry < 2 && P.live) {
-    P.retry++;
-    setTimeout(() => { if (token === P.token) play(P.item, { ...P.ctx, resume: true, keepRetry: true, exact: true, fallback: true }); }, 1500);
-    return;
-  }
-  fail(`Falha na reprodução (${type}${detail ? `: ${detail}` : ''}).`);
+  // net: User-Agent/Referer do canal, quando a lista os define.
+  await engine.load(url, { live, startAt, net: itemNet(P.item), keepRetry });
 }
 
 export async function play(item, ctx = {}) {
@@ -275,7 +166,6 @@ export async function play(item, ctx = {}) {
   }
   if (token !== P.token) return;
   if (P.item && !P.live) persist(true);
-  if (!ctx.keepRetry) P.retry = 0;
   P.item = item;
   P.ctx = ctx;
   P.live = live;
@@ -287,7 +177,7 @@ export async function play(item, ctx = {}) {
   emit('player-item');
   let url;
   try { url = streamUrl(item); } catch (e) { showError(e.message); return; }
-  await load(url, live, startAt, token);
+  await load(url, live, startAt, token, !!ctx.keepRetry);
   if (live) saveHistory(item);
 }
 
@@ -329,7 +219,7 @@ export function close() {
 export function stop() {
   P.token++;
   persist(true);
-  teardown();
+  engine.destroy();
   clearTracks();
   spin(false);
   el.err.hidden = true;
@@ -350,7 +240,7 @@ function showOsd(focus) {
   root.classList.add('osd-on');
   root.classList.remove('nocursor');
   clearTimeout(P.osdTimer);
-  P.osdTimer = setTimeout(() => { if (!video.paused && el.err.hidden) hideOsd(); }, 5000);
+  P.osdTimer = setTimeout(() => { if (!media.paused && el.err.hidden) hideOsd(); }, 5000);
   if (focus && !osd.contains(document.activeElement)) requestAnimationFrame(() => focusEl(el.bPlay));
 }
 // A barra some depois de 5 s sem uso; o cursor do mouse some junto.
@@ -362,14 +252,14 @@ function hideOsd() {
 }
 
 function togglePlay() {
-  if (video.paused) tryPlay(); else video.pause();
+  if (media.paused) tryPlay(); else media.pause();
 }
 function updatePlayIcon() {
-  el.bPlay.replaceChildren(icon(video.paused ? 'play' : 'pause'));
+  el.bPlay.replaceChildren(icon(media.paused ? 'play' : 'pause'));
 }
 function seek(d) {
-  if (P.live || !Number.isFinite(video.duration)) return;
-  video.currentTime = Math.max(0, Math.min(video.duration - 1, video.currentTime + d));
+  if (P.live || !Number.isFinite(media.duration)) return;
+  media.currentTime = Math.max(0, Math.min(media.duration - 1, media.currentTime + d));
   onTime();
 }
 
@@ -382,22 +272,22 @@ function zap(d) {
 
 function onTime() {
   if (P.live) return;
-  const d = video.duration;
+  const d = media.duration;
   if (Number.isFinite(d) && d > 0) {
-    el.fill.style.width = `${(video.currentTime / d) * 100}%`;
-    el.cur.textContent = fmtTime(video.currentTime);
+    el.fill.style.width = `${(media.currentTime / d) * 100}%`;
+    el.cur.textContent = fmtTime(media.currentTime);
     el.dur.textContent = fmtTime(d);
     el.bar.setAttribute('aria-valuemax', String(Math.round(d)));
-    el.bar.setAttribute('aria-valuenow', String(Math.round(video.currentTime)));
-    el.bar.setAttribute('aria-valuetext', `${fmtTime(video.currentTime)} de ${fmtTime(d)}`);
+    el.bar.setAttribute('aria-valuenow', String(Math.round(media.currentTime)));
+    el.bar.setAttribute('aria-valuetext', `${fmtTime(media.currentTime)} de ${fmtTime(d)}`);
   }
   if (Date.now() - P.lastSave > 5000) persist();
 }
 
 function persist(force) {
   if (!P.item || P.live) return;
-  const pos = video.currentTime;
-  const dur = video.duration;
+  const pos = media.currentTime;
+  const dur = media.duration;
   if (!Number.isFinite(pos) || pos < 1 || !Number.isFinite(dur)) return;
   if (!force && Date.now() - P.lastSave < 5000) return;
   P.lastSave = Date.now();
@@ -406,7 +296,7 @@ function persist(force) {
 
 function onEnded() {
   if (P.live) return;
-  if (P.item) saveHistory(P.item, { pos: video.duration, dur: video.duration });
+  if (P.item) saveHistory(P.item, { pos: media.duration, dur: media.duration });
   const list = P.ctx.list;
   if (P.item?.kind === 'episode' && list) {
     const i = list.findIndex((e) => e.id === P.item.id);
@@ -443,7 +333,7 @@ async function updateInfo() {
 function updateTrackButtons() {
   el.bAudio.disabled = audioList().length < 2;
   el.bSubs.disabled = !P.item || (P.item.kind === 'live' && !hasStreamSubs());
-  el.bQuality.disabled = !qualityAvailable(P.hls, P.item);
+  el.bQuality.disabled = !qualityAvailable(engine, P.item);
 }
 function applyAspect() { video.style.objectFit = S.settings.aspect || 'contain'; }
 function cycleAspect() {
@@ -474,7 +364,7 @@ function numInput(d) {
 export function onKey(k) {
   if (P.mode !== 'full') return false;
   const osdOn = osdVisible();
-  if (k === 'back') { if (osdOn && !video.paused) hideOsd(); else close(); return true; }
+  if (k === 'back') { if (osdOn && !media.paused) hideOsd(); else close(); return true; }
   if (k === 'playpause') { togglePlay(); showOsd(false); return true; }
   if (k === 'chup' || k === 'chdown') { zap(k === 'chup' ? -1 : 1); return true; }
   if (/^\d$/.test(k) && P.live) { numInput(k); return true; }

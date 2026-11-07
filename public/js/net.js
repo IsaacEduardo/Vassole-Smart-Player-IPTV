@@ -13,9 +13,13 @@ export async function netFetch(url, opts, init = {}) {
     r = await fetch(toNet(url, opts), init);
   } catch (e) {
     if (e.name === 'AbortError') throw e;
+    // Nos apps (TV, Android) não há proxy: a plataforma vem gravada pelo build (página e worker).
+    const g = typeof self !== 'undefined' ? self : {};
+    const app = g.__PLATFORM__ && g.__PLATFORM__ !== 'browser';
     throw new Error(opts?.proxy
       ? 'Sem resposta do servidor local. Verifique se o server.mjs está em execução.'
-      : 'Falha de rede ou bloqueio de CORS. Ative o proxy nos Ajustes.');
+      : app ? 'Sem resposta do servidor do provedor. Confira o endereço e a conexão de internet do aparelho.'
+        : 'Falha de rede ou bloqueio de CORS. Ative o proxy nos Ajustes.');
   }
   if (!r.ok && r.status !== 206) {
     const t = await r.text().catch(() => '');
@@ -45,7 +49,20 @@ export async function textStream(response) {
     cancel(r) { reader.cancel(r); },
   });
   const gz = head[0] === 0x1f && head[1] === 0x8b;
-  if (gz && typeof DecompressionStream === 'undefined') throw new Error('Este navegador não descompacta guias .gz');
+  if (gz && typeof DecompressionStream === 'undefined') {
+    throw new Error('Este aparelho não descompacta guias .xml.gz. Use o endereço do guia sem compactação (.xml).');
+  }
   const bytes = gz ? src.pipeThrough(new DecompressionStream('gzip')) : src;
-  return bytes.pipeThrough(new TextDecoderStream());
+  if (typeof TextDecoderStream !== 'undefined') return bytes.pipeThrough(new TextDecoderStream());
+  // TVs com Chromium < 71: decodifica os pedaços à mão, sem TransformStream.
+  const r2 = bytes.getReader();
+  const dec = new TextDecoder();
+  return new ReadableStream({
+    async pull(c) {
+      const { value, done } = await r2.read();
+      if (done) { const tail = dec.decode(); if (tail) c.enqueue(tail); c.close(); return; }
+      c.enqueue(dec.decode(value, { stream: true }));
+    },
+    cancel(r) { r2.cancel(r); },
+  });
 }

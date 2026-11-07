@@ -9,6 +9,9 @@ import { focusFirst } from './nav.js';
 import * as db from './db.js';
 import { add } from './views-common.js';
 import { applyCueStyle } from './subs.js';
+import { caps, PLATFORM } from './platform.js';
+
+const PLATFORM_NAMES = { android: 'Android', tizen: 'Samsung (Tizen)', webos: 'LG (webOS)', browser: 'Navegador' };
 import { LANGS, langName } from './lang.js';
 
 // Backup em JSON: playlists (com credenciais), favoritos, histórico e ajustes.
@@ -269,12 +272,14 @@ export async function viewSettings(root) {
 
   add(root, 
     h('header', { class: 'page-head' }, h('h1', null, 'Ajustes')),
-    section('Rede',
+    // Fora do navegador não há servidor local: o app acessa os provedores diretamente.
+    caps.proxy ? section('Rede',
       row('Proxy do servidor local', proxyStatus, segmented([
         { value: 'auto', label: 'Automático' }, { value: 'on', label: 'Sempre' }, { value: 'off', label: 'Desligado' },
       ], st.proxyMode, async (v) => { await setSetting('proxyMode', v); toast(S.net.proxy ? 'Proxy ativo' : 'Proxy desligado'); })),
       row('User-Agent', 'Alguns provedores exigem um identificador específico. Só é aplicado pelo proxy.', ua),
-      row('Verificar servidor local', null, h('button', { class: 'btn sm', onclick: async () => { await detectProxy(); toast(S.proxyAvailable ? 'Servidor local encontrado' : 'Servidor local não encontrado'); rerender(); } }, 'Verificar'))),
+      row('Verificar servidor local', null, h('button', { class: 'btn sm', onclick: async () => { await detectProxy(); toast(S.proxyAvailable ? 'Servidor local encontrado' : 'Servidor local não encontrado'); rerender(); } }, 'Verificar'))) : section('Rede',
+      row('Acesso aos provedores', 'Neste aparelho o app acessa os provedores diretamente, sem servidor local.', h('span', { class: 'muted small' }, PLATFORM_NAMES[PLATFORM] || PLATFORM))),
     section('Reprodução',
       row('Formato ao vivo (Xtream)', 'HLS (.m3u8) ou MPEG-TS (.ts). Automático usa o que a conta permite, com preferência por HLS.', segmented([
         { value: 'auto', label: 'Automático' }, { value: 'hls', label: 'HLS' }, { value: 'ts', label: 'MPEG-TS' },

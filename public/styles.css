@@ -30,7 +30,7 @@
 }
 
 * { box-sizing: border-box; }
-html { font-size: clamp(14px, 0.5vw + 9px, 26px); }
+html { font-size: 16px; font-size: clamp(14px, 0.5vw + 9px, 26px); } /* 16px: TVs sem clamp() (Chromium < 79) */
 body {
   margin: 0; height: 100vh; overflow: hidden;
   background: var(--bg); color: var(--text);
@@ -345,3 +345,13 @@ img.noimg { visibility: hidden; }
 /* Marca: "Vassole" em destaque e "Smart Player IPTV" abaixo */
 .brand-name { display: flex; flex-direction: column; line-height: 1.1; }
 .brand-sub { font-size: .68rem; font-weight: 700; letter-spacing: .04em; color: var(--muted); text-transform: uppercase; }
+/* TVs com Chromium < 88 (sem aspect-ratio): tamanhos fixos para que miniaturas e prévia não sumam. */
+@supports not (aspect-ratio: 1 / 1) {
+  .card.poster .thumb { height: 14.25rem; }
+  .card.wide .thumb { height: 9rem; }
+  .card.chan .logo { height: 5.95rem; }
+  .detail-poster { height: 22.5rem; }
+  .ep-thumb { height: 6.2rem; }
+  .preview { height: 0; padding-top: 56.25%; }
+  .preview > * { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+}
