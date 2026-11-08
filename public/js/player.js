@@ -26,8 +26,10 @@ export function initPlayer() {
     onBlocked: () => showError('O navegador bloqueou a reprodução automática.', true),
     onTracks: () => { applyPrefs(); updateTrackButtons(); },
     onReload: () => { if (P.item) play(P.item, { ...P.ctx, resume: true, keepRetry: true, exact: true, fallback: true }); },
-  });
+  }, { prefer: S.settings.androidPlayer });
   media = engine.media;
+  // Vídeo nativo (Android): desenhado atrás da página; o <video> da página fica oculto.
+  document.documentElement.classList.toggle('native-video', !!engine.nativeVideo);
   el.spinner = h('div', { class: 'spinner', hidden: true });
   el.err = h('div', { class: 'perr', hidden: true });
   stage = h('div', { class: 'stage', onclick: () => { if (P.mode === 'preview') toFull(); } }, video, el.spinner, el.err);
@@ -184,6 +186,7 @@ export async function play(item, ctx = {}) {
 function mountPreview(mount) {
   P.mode = 'preview';
   mount.replaceChildren(stage);
+  if (engine.setViewport) engine.setViewport(stage);
   root.hidden = true;
   document.body.classList.remove('playing');
   popScope(scopeFn);
@@ -193,6 +196,7 @@ function showFull() {
   if (P.mode !== 'full') {
     P.mode = 'full';
     root.prepend(stage);
+    if (engine.setViewport) engine.setViewport(stage);
     root.hidden = false;
     document.body.classList.add('playing');
     pushScope(scopeFn);
@@ -220,6 +224,7 @@ export function stop() {
   P.token++;
   persist(true);
   engine.destroy();
+  if (engine.setViewport) engine.setViewport(null);
   clearTracks();
   spin(false);
   el.err.hidden = true;
@@ -335,7 +340,10 @@ function updateTrackButtons() {
   el.bSubs.disabled = !P.item || (P.item.kind === 'live' && !hasStreamSubs());
   el.bQuality.disabled = !qualityAvailable(engine, P.item);
 }
-function applyAspect() { video.style.objectFit = S.settings.aspect || 'contain'; }
+function applyAspect() {
+  video.style.objectFit = S.settings.aspect || 'contain';
+  if (engine.setAspect) engine.setAspect(S.settings.aspect || 'contain');
+}
 function cycleAspect() {
   const i = ASPECTS.findIndex(([k]) => k === (S.settings.aspect || 'contain'));
   const [k, label] = ASPECTS[(i + 1) % ASPECTS.length];

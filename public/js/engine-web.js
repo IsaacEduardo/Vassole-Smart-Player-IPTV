@@ -18,6 +18,30 @@ function loadScript(src) {
   return scripts.get(src);
 }
 
+// Tipo do stream: pela extensão ou, sem ela, pelos primeiros bytes ('hls' | 'mpegts' | 'native').
+export async function pickKind(url, isLive, net) {
+  let path = url.toLowerCase();
+  try { path = new URL(url).pathname.toLowerCase(); } catch { /* */ }
+  if (/\.m3u8?$/.test(path)) return 'hls';
+  if (/\.ts$/.test(path)) return 'mpegts';
+  if (/\.(mp4|m4v|webm|mov|mkv|ogv|mp3|aac|m4a)$/.test(path)) return 'native';
+  // Extensão desconhecida: lê os primeiros bytes para decidir.
+  const ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const t = setTimeout(() => { if (ac) ac.abort(); }, 8000);
+  try {
+    const r = await fetch(toNet(url, net), { signal: ac ? ac.signal : undefined, headers: { Range: 'bytes=0-2047' } });
+    const ct = r.headers.get('content-type') || '';
+    const { value } = await r.body.getReader().read();
+    if (ac) ac.abort();
+    if (/mpegurl/i.test(ct)) return 'hls';
+    if (value && new TextDecoder().decode(value.slice(0, 32)).includes('#EXTM3U')) return 'hls';
+    if (value && value[0] === 0x47) return 'mpegts';
+    if (/mp2t/i.test(ct)) return 'mpegts';
+    if (/^(video|audio)\//i.test(ct)) return 'native';
+  } catch { /* segue o padrão */ } finally { clearTimeout(t); }
+  return isLive ? 'mpegts' : 'native';
+}
+
 const call = (fn, ...a) => { if (typeof fn === 'function') fn(...a); };
 
 export function createWebEngine(video, cb = {}) {
@@ -46,29 +70,6 @@ export function createWebEngine(video, cb = {}) {
     }
     video.removeAttribute('src');
     try { video.load(); } catch { /* */ }
-  }
-
-  async function pickKind(url, isLive, net) {
-    let path = url.toLowerCase();
-    try { path = new URL(url).pathname.toLowerCase(); } catch { /* */ }
-    if (/\.m3u8?$/.test(path)) return 'hls';
-    if (/\.ts$/.test(path)) return 'mpegts';
-    if (/\.(mp4|m4v|webm|mov|mkv|ogv|mp3|aac|m4a)$/.test(path)) return 'native';
-    // Extensão desconhecida: lê os primeiros bytes para decidir.
-    const ac = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const t = setTimeout(() => { if (ac) ac.abort(); }, 8000);
-    try {
-      const r = await fetch(toNet(url, net), { signal: ac ? ac.signal : undefined, headers: { Range: 'bytes=0-2047' } });
-      const ct = r.headers.get('content-type') || '';
-      const { value } = await r.body.getReader().read();
-      if (ac) ac.abort();
-      if (/mpegurl/i.test(ct)) return 'hls';
-      if (value && new TextDecoder().decode(value.slice(0, 32)).includes('#EXTM3U')) return 'hls';
-      if (value && value[0] === 0x47) return 'mpegts';
-      if (/mp2t/i.test(ct)) return 'mpegts';
-      if (/^(video|audio)\//i.test(ct)) return 'native';
-    } catch { /* segue o padrão */ } finally { clearTimeout(t); }
-    return isLive ? 'mpegts' : 'native';
   }
 
   function tryPlay() {

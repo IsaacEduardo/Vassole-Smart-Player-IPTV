@@ -19,6 +19,7 @@ export const DEFAULTS = {
   langHideOthers: false,  // esconder itens de outros idiomas (os sem idioma continuam visíveis)
   stripLangPrefix: false, // exibir "PT: SIC" como "SIC"
   epgOffset: 0,           // ajuste manual do guia XMLTV, em horas
+  androidPlayer: 'native',  // Android: 'native' (ExoPlayer) ou 'web' (hls.js/mpegts.js no WebView)
   chanQuality: 'high',    // canal com várias qualidades: começa pela 'high' (maior) ou 'low' (mais leve)
   autoUpdateHours: 24,
   epgUpdateHours: 12,

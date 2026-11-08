@@ -17,6 +17,7 @@
 //              onBlocked() reprodução automática bloqueada; onTracks() faixas ou níveis mudaram;
 //              onReload() o motor pede para recarregar o item (o player chama play de novo).
 import { createWebEngine } from './engine-web.js';
+import { createAndroidEngine } from './engine-android.js';
 
 const PLATFORMS = ['browser', 'android', 'tizen', 'webos'];
 
@@ -116,8 +117,11 @@ export function onBackButton(fn) {
   return true;
 }
 
-// Motor de reprodução da plataforma. Nesta versão, todas usam o motor web (hls.js, mpegts.js e
-// <video>); os motores nativos entram nas fases de cada plataforma.
-export function createEngine(video, callbacks) {
+// Motor de reprodução da plataforma. Android: ExoPlayer (plugin NativePlayer do APK), salvo se o
+// ajuste pedir o motor web. Demais: motor web (hls.js, mpegts.js e <video>).
+export const hasNativePlayer = () => !!(PLATFORM === 'android' && W.Capacitor && W.Capacitor.Plugins && W.Capacitor.Plugins.NativePlayer);
+
+export function createEngine(video, callbacks, { prefer = 'native' } = {}) {
+  if (prefer !== 'web' && hasNativePlayer()) return createAndroidEngine(video, callbacks, W.Capacitor.Plugins.NativePlayer);
   return createWebEngine(video, callbacks);
 }

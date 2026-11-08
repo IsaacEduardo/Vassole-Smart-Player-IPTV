@@ -120,7 +120,7 @@ npm run android:apk        # build web + sincroniza + APK de teste: android/app/
 
 **Instalar para testar:** com a depuração USB (ou por rede) ativa no aparelho, `adb install -r android/app/build/outputs/apk/debug/app-debug.apk`. Também é possível copiar o APK para o aparelho e abri-lo (permita "instalar apps desconhecidas" para o gestor de ficheiros). No emulador, o computador responde em `10.0.2.2` (ex.: provedor de testes em `http://10.0.2.2:9100`).
 
-**Proxy dentro do APK:** os pedidos da página a `/proxy` e `/api/health` são atendidos em Java (`NativeProxy.java`, `HlsRewriter.java`), com as mesmas regras do `server.mjs`: redirecionamentos, `Range`, `User-Agent`/`Referer` por canal e reescrita de HLS. Só a página do app os vê — nada fica aberto em porta de rede. Assim, no Android funcionam também os cabeçalhos por canal e a leitura do guia em fluxo, inclusive no Web Worker. A reprodução usa, por enquanto, o motor web (hls.js, mpegts.js e `<video>`); o ExoPlayer (HEVC e AC-3 por hardware) é a próxima etapa.
+**Proxy dentro do APK:** os pedidos da página a `/proxy` e `/api/health` são atendidos em Java (`NativeProxy.java`, `HlsRewriter.java`), com as mesmas regras do `server.mjs`: redirecionamentos, `Range`, `User-Agent`/`Referer` por canal e reescrita de HLS. Só a página do app os vê — nada fica aberto em porta de rede. Assim, no Android funcionam também os cabeçalhos por canal e a leitura do guia em fluxo, inclusive no Web Worker. **Player nativo (ExoPlayer / Media3):** no Android a reprodução usa o ExoPlayer (`NativePlayerPlugin.java` + `public/js/engine-android.js`), que decodifica por hardware formatos que o navegador não reproduz (HEVC/H.265 e, quando o aparelho suporta, AC-3/E-AC-3), mostra legendas embutidas em MKV/MP4 e envia `User-Agent`/`Referer` por canal diretamente ao provedor. O vídeo é desenhado atrás da página, no retângulo do palco do player (prévia ou tela cheia); a interface fica por cima. As legendas (do stream e externas) são desenhadas pelo app numa camada própria, com a aparência definida nos Ajustes. Em **Ajustes › Reprodução › Player de vídeo** é possível voltar ao motor web (hls.js/mpegts.js) caso algum canal não abra no nativo (vale ao reabrir o app).
 
 **Versão de produção (Google Play):**
 
@@ -180,7 +180,7 @@ server.mjs                Entrada CLI do servidor HTTP (Node 18+, zero dependên
 scripts/
   build-sw.mjs            Gera a lista de ficheiros (SHELL) e o hash de versão do Service Worker
   build.mjs               Gera dist/<plataforma>/ (esbuild, alvo Chromium 56)
-android/                  Projeto Capacitor (APK/AAB): NativeProxy.java, HlsRewriter.java, MainActivity.java
+android/                  Projeto Capacitor (APK/AAB): NativeProxy.java, HlsRewriter.java, NativePlayerPlugin.java (ExoPlayer), MainActivity.java
 capacitor.config.json     Configuração do Capacitor (identificador, pasta web)
 lib/
   app.mjs                 Servidor estático, endpoint /api/health e proxy com reescrita HLS
@@ -198,6 +198,7 @@ public/
     platform.js           Plataforma (navegador/Android/Tizen/webOS), capacidades, teclas e motor de reprodução
     engine-web.js         Motor de reprodução web: hls.js, mpegts.js e <video>, com recuperação de erros
     polyfills.js          Complementos para navegadores de TV antigos
+    engine-android.js     Motor de reprodução do Android: ExoPlayer (plugin NativePlayer), vídeo atrás da página
     db.js                 Armazenamento local em IndexedDB com migrações de esquema
     store.js              Estado global, playlists, favoritos, histórico, progresso e associação de EPG
     net.js                Cliente HTTP (roteamento via /proxy e descompactação de streams gzip)

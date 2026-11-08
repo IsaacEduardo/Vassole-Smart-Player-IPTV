@@ -355,3 +355,17 @@ img.noimg { visibility: hidden; }
   .preview { height: 0; padding-top: 56.25%; }
   .preview > * { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
 }
+/* Android com player nativo: o vídeo é desenhado atrás da página, no retângulo do palco.
+   Enquanto há vídeo (video-on), os fundos da página ficam transparentes; fora do vídeo aparece a
+   cor de fundo da janela do app, igual a --bg. Em tela cheia, o resto do app some atrás da barra. */
+html.native-video .stage video { display: none; }
+html.video-on, html.video-on body, html.video-on #view, html.video-on .preview,
+html.video-on #player, html.video-on .stage { background: transparent; }
+html.video-on body.playing #app { visibility: hidden; }
+/* Legendas desenhadas pelo app (player nativo): do stream e externas. */
+.cue-layer { position: absolute; left: 4%; right: 4%; bottom: 7%; text-align: center; pointer-events: none; z-index: 1; transition: transform .25s; }
+.cue-layer.raised { bottom: 22%; }
+.cue-layer.top { bottom: auto; top: 6%; }
+.cue-layer .cue { display: inline; padding: .1em .35em; white-space: pre-line; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+#player.osd-on .cue-layer:not(.top) { transform: translateY(-17vh); }
+.preview .cue-layer { display: none; }

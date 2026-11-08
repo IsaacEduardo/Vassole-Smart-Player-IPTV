@@ -10,7 +10,8 @@ import { decodeText, parseSubtitle, buildVtt, fmtOffset } from './subs-core.js';
 
 const T = {
   video: null, engine: null, item: () => null, onUpdate: () => {},
-  ext: null, // { cues, name, lang, offset, el, url }
+  ext: null, // { cues, name, lang, offset, el, url, show }
+  layer: null, streamTexts: [], shown: '', // player nativo: legendas desenhadas pelo app
   manualSubs: false, manualAudio: false, token: 0,
 };
 
@@ -29,13 +30,36 @@ export function initTracks(video, { engine, item, onUpdate }) {
     list.addEventListener('removetrack', () => T.onUpdate());
   }
   video.addEventListener('loadedmetadata', () => { applyPrefs(); T.onUpdate(); });
+  // Player nativo (Android): o vídeo não está no <video>; as legendas vão numa camada sobre o palco.
+  if (engine.nativeVideo) {
+    T.layer = h('div', { class: 'cue-layer', 'aria-live': 'off' });
+    video.parentElement.append(T.layer);
+    engine.setCueListener((texts) => { T.streamTexts = texts; renderCues(); });
+    engine.media.addEventListener('timeupdate', renderCues);
+  }
   applyCueStyle();
+}
+
+// Desenha a fala atual: a da legenda externa (pelo tempo do player e o ajuste) ou a do stream.
+function renderCues() {
+  if (!T.layer) return;
+  let texts = T.streamTexts;
+  if (extOn()) {
+    const t = T.engine.media.currentTime;
+    const off = T.ext.offset || 0;
+    texts = T.ext.cues.filter((c) => c.s + off <= t && t < c.e + off).map((c) => c.text);
+  }
+  const plain = texts.map((x) => String(x).replace(/<[^>]+>/g, ''));
+  const key = plain.join('\n');
+  if (key === T.shown) return;
+  T.shown = key;
+  T.layer.replaceChildren(...plain.flatMap((x, i) => (i ? [h('br'), h('span', { class: 'cue' }, x)] : [h('span', { class: 'cue' }, x)])));
 }
 
 const vodItem = (it) => !!it && it.kind !== 'live';
 const keyFor = (it) => itemKey(S.pl.id, it.kind, it.id);
 const extTrack = () => T.ext?.el?.track || null;
-const extOn = () => extTrack()?.mode === 'showing';
+const extOn = () => !!T.ext && (T.ext.el ? T.ext.el.track.mode === 'showing' : !!T.ext.show);
 
 // ---- Ciclo de vida ----
 export async function onItem(item) {
@@ -65,6 +89,7 @@ function removeExternal() {
   dropTrackEl(T.ext.el, T.ext.url);
   T.ext = null;
   T.onUpdate();
+  renderCues();
 }
 
 function attachExternal(cues, { name, lang, offset = 0, show = true }) {
@@ -78,6 +103,14 @@ function renderExternal(show) {
   const x = T.ext;
   if (!x) return;
   dropTrackEl(x.el, x.url);
+  if (T.engine.nativeVideo) { // player nativo: a camada do app desenha a legenda
+    x.el = null;
+    x.show = show;
+    if (show) hideStreamSubs();
+    T.onUpdate();
+    renderCues();
+    return;
+  }
   const vtt = buildVtt(x.cues, { offset: x.offset, line: LINE[S.settings.subPos] || '' });
   x.url = URL.createObjectURL(new Blob([vtt], { type: 'text/vtt' }));
   x.el = h('track', { kind: 'subtitles', label: `Externa: ${x.name}`, src: x.url });
@@ -174,6 +207,7 @@ export async function pickSubs() {
 function selectSub(v) {
   const ext = extTrack();
   if (ext) ext.mode = v === 'ext' ? 'showing' : 'disabled';
+  else if (T.ext) T.ext.show = v === 'ext';
   T.engine.setSubtitleTrack(v[0] === 's' ? Number(v.slice(1)) : -1);
   T.onUpdate();
 }
@@ -259,6 +293,10 @@ export function applyCueStyle() {
   const bg = BGS[st.subBg] || BGS.semi;
   el.textContent = `video::cue { font-family: "Atkinson Hyperlegible", system-ui, sans-serif; line-height: 1.25;
   font-size: ${SIZES[st.subSize] || SIZES.m}; color: ${COLORS[st.subColor] || COLORS.white}; background-color: ${bg};
+  ${bg === 'transparent' ? 'text-shadow: 0 0 3px #000, 0 0 6px #000, 1px 1px 2px #000;' : ''} }
+.cue-layer .cue { font-family: "Atkinson Hyperlegible", system-ui, sans-serif; line-height: 1.35;
+  font-size: ${SIZES[st.subSize] || SIZES.m}; color: ${COLORS[st.subColor] || COLORS.white}; background-color: ${bg};
   ${bg === 'transparent' ? 'text-shadow: 0 0 3px #000, 0 0 6px #000, 1px 1px 2px #000;' : ''} }`;
+  if (T.layer) T.layer.className = `cue-layer ${st.subPos === 'top' ? 'top' : st.subPos === 'raised' ? 'raised' : ''}`;
   if (T.ext) renderExternal(extOn());
 }

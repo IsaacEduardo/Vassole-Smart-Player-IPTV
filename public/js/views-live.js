@@ -98,7 +98,7 @@ export async function viewLive(root) {
           if (sameChannel(player.current(), ch)) player.toFull();
           else player.play(ch, { mode: 'full', mount: preview, list: current, index: current.indexOf(ch) });
         } }, icon('full'), 'Tela cheia'), favBtn),
-      variantsRow(ch),
+      variantsRow(ch) || '', // canal sem outras qualidades: nada (replaceChildren escreveria "null")
       h('div', { class: 'epg-list muted' }, 'Carregando guia…'));
     const progs = await epgWithFallback(ch);
     if (infoItem !== ch) return;
