@@ -16,7 +16,10 @@
     "build:dev": "node scripts/build.mjs --dev",
     "android:sync": "node scripts/build.mjs android && npx cap sync android",
     "android:apk": "npm run android:sync && cd android && gradlew assembleDebug",
-    "android:release": "npm run android:sync && cd android && gradlew bundleRelease assembleRelease"
+    "android:release": "npm run android:sync && cd android && gradlew bundleRelease assembleRelease",
+    "tizen:package": "node scripts/tizen.mjs package",
+    "tizen:install": "node scripts/tizen.mjs install",
+    "tizen:run": "node scripts/tizen.mjs run"
   },
   "devDependencies": {
     "@capacitor/android": "8.6.0",

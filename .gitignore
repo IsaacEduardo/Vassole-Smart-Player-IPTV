@@ -9,3 +9,7 @@ __pycache__/
 # configuração local do Claude Code
 .claude/
 dist/
+# certificados e pacotes assinados (Samsung/LG): nunca no git
+*.p12
+*.wgt
+*.ipk

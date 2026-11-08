@@ -42,9 +42,10 @@ export async function pickQuality(engine, item, playVariant) {
 }
 
 const RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
-// Devolve a velocidade escolhida, ou undefined se o menu for fechado.
-export function pickSpeed(current) {
-  return choose('Velocidade', RATES.map((r) => ({
+// Devolve a velocidade escolhida, ou undefined se o menu for fechado. allowed: velocidades aceitas
+// pelo motor (o AVPlay da Samsung só aceita valores inteiros).
+export function pickSpeed(current, allowed) {
+  return choose('Velocidade', (allowed || RATES).map((r) => ({
     label: r === 1 ? 'Normal (1×)' : `${String(r).replace('.', ',')}×`, value: r, active: Math.abs((current || 1) - r) < 0.01,
   })));
 }

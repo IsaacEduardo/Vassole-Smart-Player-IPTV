@@ -18,6 +18,7 @@
 //              onReload() o motor pede para recarregar o item (o player chama play de novo).
 import { createWebEngine } from './engine-web.js';
 import { createAndroidEngine } from './engine-android.js';
+import { createTizenEngine } from './engine-tizen.js';
 
 const PLATFORMS = ['browser', 'android', 'tizen', 'webos'];
 
@@ -117,11 +118,15 @@ export function onBackButton(fn) {
   return true;
 }
 
-// Motor de reprodução da plataforma. Android: ExoPlayer (plugin NativePlayer do APK), salvo se o
-// ajuste pedir o motor web. Demais: motor web (hls.js, mpegts.js e <video>).
-export const hasNativePlayer = () => !!(PLATFORM === 'android' && W.Capacitor && W.Capacitor.Plugins && W.Capacitor.Plugins.NativePlayer);
+// Motor de reprodução da plataforma. Android: ExoPlayer (plugin NativePlayer do APK); Samsung: AVPlay;
+// salvo se o ajuste pedir o motor web. Demais: motor web (hls.js, mpegts.js e <video>).
+export const hasNativePlayer = () => !!((PLATFORM === 'android' && W.Capacitor && W.Capacitor.Plugins && W.Capacitor.Plugins.NativePlayer)
+  || (PLATFORM === 'tizen' && W.webapis && W.webapis.avplay));
 
 export function createEngine(video, callbacks, { prefer = 'native' } = {}) {
-  if (prefer !== 'web' && hasNativePlayer()) return createAndroidEngine(video, callbacks, W.Capacitor.Plugins.NativePlayer);
+  if (prefer !== 'web' && hasNativePlayer()) {
+    if (PLATFORM === 'tizen') return createTizenEngine(video, callbacks, W.webapis.avplay);
+    return createAndroidEngine(video, callbacks, W.Capacitor.Plugins.NativePlayer);
+  }
   return createWebEngine(video, callbacks);
 }

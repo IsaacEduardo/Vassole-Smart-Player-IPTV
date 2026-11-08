@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as esbuild from 'esbuild';
-import { buildPlatform, TARGET, lowerInset } from '../scripts/build.mjs';
+import { buildPlatform, TARGET, lowerInset, TIZEN_PACKAGE, tizenConfig } from '../scripts/build.mjs';
 
 // ---- inset → top/right/bottom/left ----
 assert.equal(lowerInset('.a { inset: 0; }'), '.a { top:0;right:0;bottom:0;left:0; }');
@@ -78,6 +78,24 @@ try {
     if (platform === 'browser') assert.ok(css.includes(':focus-visible'), 'navegador mantém :focus-visible');
     else assert.ok(!css.includes(':focus-visible') && !html.includes('rel="manifest"'), 'TV: foco sempre visível e sem manifesto');
   }
+  // Pacote Samsung: manifesto, ícone e APIs da TV antes do app.
+  const tz = join(out, 'tizen');
+  const cfg = readFileSync(join(tz, 'config.xml'), 'utf8');
+  const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+  assert.equal(TIZEN_PACKAGE.length, 10, 'id do pacote Tizen com 10 caracteres');
+  assert.ok(/^[A-Za-z0-9]{10}$/.test(TIZEN_PACKAGE), 'id do pacote Tizen só com letras e números');
+  assert.ok(cfg.includes(`<tizen:application id="${TIZEN_PACKAGE}.SmartPlayer" package="${TIZEN_PACKAGE}"`), 'config.xml: id do app');
+  assert.ok(cfg.includes(`version="${pkg.version}"`), 'config.xml: versão do package.json');
+  assert.ok(cfg.includes('<access origin="*" subdomains="true"/>'), 'config.xml: acesso aos provedores');
+  for (const p of ['internet', 'tv.inputdevice']) assert.ok(cfg.includes(`http://tizen.org/privilege/${p}"`), `config.xml: privilégio ${p}`);
+  assert.ok(cfg.includes('hwkey-event="enable"') && cfg.includes('<tizen:profile name="tv-samsung"/>'), 'config.xml: perfil de TV e teclas');
+  assert.ok(existsSync(join(tz, 'icon.png')), 'Tizen: icon.png na raiz do pacote');
+  const tzHtml = readFileSync(join(tz, 'index.html'), 'utf8');
+  assert.ok(tzHtml.indexOf('$WEBAPIS/webapis/webapis.js') > 0 && tzHtml.indexOf('$WEBAPIS/webapis/webapis.js') < tzHtml.indexOf('js/app.js'), 'Tizen: webapis.js antes do app');
+  assert.ok(!readFileSync(join(out, 'browser', 'index.html'), 'utf8').includes('webapis'), 'navegador sem webapis.js');
+  assert.ok(!existsSync(join(out, 'browser', 'config.xml')), 'navegador sem config.xml');
+  assert.equal(tizenConfig({ version: '1.2.3' }).match(/version="1\.2\.3"/g).length, 1);
+
   // As bibliotecas copiadas sem conversão também precisam rodar no Chromium 56.
   for (const f of ['hls.min.js', 'mpegts.js']) {
     assert.ok(fitsTarget(readFileSync(join(out, 'tizen', 'vendor', f), 'utf8')), `vendor/${f} usa só sintaxe do Chromium 56`);

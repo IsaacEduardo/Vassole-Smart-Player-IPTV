@@ -20,13 +20,7 @@ const PUB = join(ROOT, 'public');
 const ALL = ['browser', 'android', 'tizen', 'webos'];
 export const TARGET = ['chrome56'];
 
-const args = process.argv.slice(2);
-const dev = args.includes('--dev');
-const asked = args.filter((a) => !a.startsWith('--'));
-const bad = asked.filter((p) => !ALL.includes(p));
-if (bad.length) { console.error(`Plataforma desconhecida: ${bad.join(', ')}. Use: ${ALL.join(', ')}`); process.exit(2); }
-const platforms = asked.length ? asked : ALL;
-const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
+const pkg =JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
 
 // inset (Chromium 87) → top/right/bottom/left, com as regras do atalho de 1 a 4 valores.
 export function lowerInset(css) {
@@ -36,6 +30,30 @@ export function lowerInset(css) {
     const [top, right = top, bottom = top, left = right] = v;
     return `${pre}top:${top}${imp};right:${right}${imp};bottom:${bottom}${imp};left:${left}${imp}`;
   });
+}
+
+// Manifesto do app Tizen (TVs Samsung 2018+, Tizen 4.0). TIZEN_PACKAGE: id de 10 caracteres do pacote.
+export const TIZEN_PACKAGE = 'VassolePly';
+export function tizenConfig(info) {
+  const esc = (v) => String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<widget xmlns="http://www.w3.org/ns/widgets" xmlns:tizen="http://tizen.org/ns/widgets"
+        id="http://vassole.app/smartplayer" version="${esc(info.version)}" viewmodes="maximized">
+  <tizen:application id="${TIZEN_PACKAGE}.SmartPlayer" package="${TIZEN_PACKAGE}" required_version="4.0"/>
+  <tizen:profile name="tv-samsung"/>
+  <content src="index.html"/>
+  <icon src="icon.png"/>
+  <name>Vassole Smart Player IPTV</name>
+  <description>Player de IPTV para listas M3U e contas Xtream Codes. Não inclui canais nem conteúdo.</description>
+  <feature name="http://tizen.org/feature/screen.size.all"/>
+  <!-- Acesso aos provedores do usuário (listas, guias e streams em qualquer endereço). -->
+  <access origin="*" subdomains="true"/>
+  <tizen:privilege name="http://tizen.org/privilege/internet"/>
+  <tizen:privilege name="http://tizen.org/privilege/tv.inputdevice"/>
+  <tizen:setting screen-orientation="landscape" context-menu="disable" background-support="disable"
+                 encryption="disable" install-location="auto" hwkey-event="enable"/>
+</widget>
+`;
 }
 
 export async function buildPlatform(platform, { outRoot = join(ROOT, 'dist'), minify = true } = {}) {
@@ -69,6 +87,8 @@ export async function buildPlatform(platform, { outRoot = join(ROOT, 'dist'), mi
     .replace('<script type="module" src="js/app.js"></script>', '<script src="js/app.js"></script>');
   if (platform !== 'browser') html = html.replace(/\s*<link rel="manifest"[^>]*>/, '');
   if (!html.includes('<script src="js/app.js"></script>')) throw new Error('index.html: tag do app.js não encontrada');
+  // Samsung: APIs da TV (AVPlay) carregadas antes do app.
+  if (platform === 'tizen') html = html.replace('<script src="js/app.js"></script>', '<script src="$WEBAPIS/webapis/webapis.js"></script>\n  <script src="js/app.js"></script>');
   writeFileSync(join(out, 'index.html'), html);
 
   for (const dir of ['fonts', 'icons', 'vendor']) cpSync(join(PUB, dir), join(out, dir), { recursive: true });
@@ -79,12 +99,22 @@ export async function buildPlatform(platform, { outRoot = join(ROOT, 'dist'), mi
     writeFileSync(join(out, 'vendor', f), r.code);
   }
   if (platform === 'browser') cpSync(join(PUB, 'manifest.webmanifest'), join(out, 'manifest.webmanifest'));
+  if (platform === 'tizen') {
+    writeFileSync(join(out, 'config.xml'), tizenConfig(pkg));
+    cpSync(join(PUB, 'icons', 'icon-512.png'), join(out, 'icon.png'));
+  }
   writeFileSync(join(out, 'build.json'), JSON.stringify({ app: pkg.name, version: pkg.version, platform, target: TARGET, built: new Date().toISOString() }, null, 2));
   return out;
 }
 
 // Executado pela linha de comando (e não importado pelos testes).
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  const args = process.argv.slice(2);
+  const dev = args.includes('--dev');
+  const asked = args.filter((a) => !a.startsWith('--'));
+  const bad = asked.filter((p) => !ALL.includes(p));
+  if (bad.length) { console.error(`Plataforma desconhecida: ${bad.join(', ')}. Use: ${ALL.join(', ')}`); process.exit(2); }
+  const platforms = asked.length ? asked : ALL;
   const t0 = Date.now();
   for (const p of platforms) {
     const out = await buildPlatform(p, { minify: !dev });

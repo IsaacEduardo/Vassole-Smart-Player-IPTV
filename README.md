@@ -106,7 +106,7 @@ Cada plataforma é gerada em `dist/<plataforma>/`:
 
 Para testar a saída no computador: `node server.mjs --root dist/browser --port 8081 --allow-private`.
 
-A camada `public/js/platform.js` deteta a plataforma (navegador, Android, Tizen, webOS), define o que cada uma permite (proxy, Web Worker, sair com Voltar), traduz as teclas do controlo remoto (incluindo o registo das teclas de mídia, números e coloridas na Samsung) e cria o motor de reprodução. Nesta versão todas as plataformas usam o motor web (`engine-web.js`: hls.js, mpegts.js e `<video>`); o pacote Android já está incluído (abaixo); os motores nativos (ExoPlayer, AVPlay) e os pacotes `.wgt`/`.ipk` são as próximas etapas.
+A camada `public/js/platform.js` deteta a plataforma (navegador, Android, Tizen, webOS), define o que cada uma permite (proxy, Web Worker, sair com Voltar), traduz as teclas do controlo remoto (incluindo o registo das teclas de mídia, números e coloridas na Samsung) e cria o motor de reprodução: no navegador, o motor web (`engine-web.js`: hls.js, mpegts.js e `<video>`); no Android, o ExoPlayer (`engine-android.js`); nas TVs Samsung, o AVPlay (`engine-tizen.js`). Os dois motores nativos partilham `engine-native.js` (estado da reprodução no formato do `<video>` e posição do vídeo atrás da página). O pacote LG (`.ipk`) é a próxima etapa.
 
 ### Android, Android TV, Google TV e Fire TV
 
@@ -125,7 +125,7 @@ npm run android:apk        # build web + sincroniza + APK de teste: android/app/
 **Versão de produção (Google Play):**
 
 1. Crie a chave uma única vez e guarde-a fora do projeto, com cópia de segurança — sem ela não é possível publicar atualizações:
-   `keytool -genkeypair -v -keystore C:chavesassole.jks -alias vassole -keyalg RSA -keysize 4096 -validity 10000`
+   `keytool -genkeypair -v -keystore C:/chaves/vassole.jks -alias vassole -keyalg RSA -keysize 4096 -validity 10000`
 2. Crie `android/keystore.properties` (fica fora do git):
    ```properties
    storeFile=C:/chaves/vassole.jks
@@ -136,6 +136,34 @@ npm run android:apk        # build web + sincroniza + APK de teste: android/app/
 3. `npm run android:release` gera o `.aab` assinado (`android/app/build/outputs/bundle/release/`) para a Google Play e um `.apk` assinado para instalação direta.
 
 A versão (`versionName`/`versionCode`) vem do `package.json` (1.2.3 → 10203).
+
+### Samsung (Tizen)
+
+Pacote `.wgt` para TVs Samsung de 2018 em diante (Tizen 4.0+). O build (`node scripts/build.mjs tizen`) gera em `dist/tizen/` o `config.xml` (app `VassolePly.SmartPlayer`, versão do `package.json`, privilégios `internet` e `tv.inputdevice`, acesso a qualquer endereço, para os provedores do utilizador), o `icon.png` e carrega `$WEBAPIS/webapis/webapis.js` antes do app.
+
+**Player nativo (AVPlay):** na TV a reprodução usa o AVPlay da Samsung (`engine-tizen.js`), que decodifica por hardware HLS, MPEG-TS, MP4/MKV, HEVC e AC-3. O vídeo é desenhado no plano de vídeo da TV, atrás da página, no retângulo do palco do player. Faixas de áudio e legendas do stream aparecem nos menus do player; legendas externas (.srt/.vtt) são desenhadas pelo app. Ao sair do app com o botão Home, a reprodução é suspensa e retomada ao voltar. Em **Ajustes › Reprodução › Player de vídeo** é possível voltar ao motor web.
+
+Limitações do AVPlay: não envia `Referer` por canal (o `User-Agent` sim); velocidade só 1× ou 2×; a qualidade do HLS é sempre automática.
+
+**Requisitos (uma única vez):**
+
+1. Instale o [Tizen Studio](https://developer.samsung.com/smarttv/develop/getting-started/setting-up-sdk/installing-tv-sdk.html) (versão com IDE ou só CLI). No **Package Manager**, em *Extension SDK*, instale **TV Extensions** e **Samsung Certificate Extension**. A pasta padrão é `C:\tizen-studio`; noutro lugar, defina `TIZEN_STUDIO`.
+2. **Certificado Samsung:** em *Tools › Certificate Manager*, crie um perfil novo do tipo **Samsung**, tipo de aparelho **TV**, e entre com a sua conta Samsung. No certificado de distribuidor, adicione o **DUID** da TV (aparece ao ligar a TV no *Device Manager*, passo 4) — sem isso a TV recusa o pacote. Guarde o nome do perfil (ex.: `vassole`). O certificado e a senha ficam no Tizen Studio, fora deste projeto.
+3. **Modo Desenvolvedor na TV:** em *Apps*, digite `1 2 3 4 5` com o controlo remoto, ligue **Developer mode**, informe o IP do computador e reinicie a TV (desligue da tomada por alguns segundos). O computador e a TV precisam estar na mesma rede.
+4. Descubra o IP da TV (*Definições › Geral › Rede › Estado da rede*). Opcional: no *Device Manager* do Tizen Studio, adicione a TV pelo IP para ver o DUID.
+
+**Empacotar e instalar:**
+
+```bash
+# PowerShell: $env:TIZEN_PROFILE="vassole"; $env:TIZEN_TV="192.168.1.50"; npm run tizen:run
+TIZEN_PROFILE=vassole npm run tizen:package                     # gera e assina dist/VassoleSmartPlayer.wgt
+TIZEN_PROFILE=vassole TIZEN_TV=192.168.1.50 npm run tizen:install
+TIZEN_PROFILE=vassole TIZEN_TV=192.168.1.50 npm run tizen:run   # instala e abre na TV
+```
+
+**Depuração na TV:** gere com `node scripts/build.mjs tizen --dev` e use *Run As › Tizen Web Application* (depuração) no Tizen Studio, ou `sdb connect <IP>` e o Web Inspector do Chromium.
+
+**Publicação na Samsung Apps (Seller Office):** precisa de conta de vendedor Samsung, certificado de distribuidor do tipo *Public* (no Certificate Manager), ícone de 512×423 px, capturas de ecrã de 1920×1080 e a política de privacidade. A Samsung revê apps de IPTV com atenção: a descrição deve deixar claro que o app não inclui canais nem conteúdo.
 
 ---
 
@@ -179,7 +207,8 @@ O provedor simulado (`test/mock-provider.mjs`) disponibiliza:
 server.mjs                Entrada CLI do servidor HTTP (Node 18+, zero dependências)
 scripts/
   build-sw.mjs            Gera a lista de ficheiros (SHELL) e o hash de versão do Service Worker
-  build.mjs               Gera dist/<plataforma>/ (esbuild, alvo Chromium 56)
+  build.mjs               Gera dist/<plataforma>/ (esbuild, alvo Chromium 56) e o config.xml da Samsung
+  tizen.mjs               Empacota (.wgt), instala e abre o app na TV Samsung (CLI do Tizen Studio)
 android/                  Projeto Capacitor (APK/AAB): NativeProxy.java, HlsRewriter.java, NativePlayerPlugin.java (ExoPlayer), MainActivity.java
 capacitor.config.json     Configuração do Capacitor (identificador, pasta web)
 lib/
@@ -199,6 +228,8 @@ public/
     engine-web.js         Motor de reprodução web: hls.js, mpegts.js e <video>, com recuperação de erros
     polyfills.js          Complementos para navegadores de TV antigos
     engine-android.js     Motor de reprodução do Android: ExoPlayer (plugin NativePlayer), vídeo atrás da página
+    engine-tizen.js       Motor de reprodução da Samsung: AVPlay (webapis.avplay), vídeo no plano da TV
+    engine-native.js      Base dos motores nativos: estado no formato do <video> e retângulo do vídeo
     db.js                 Armazenamento local em IndexedDB com migrações de esquema
     store.js              Estado global, playlists, favoritos, histórico, progresso e associação de EPG
     net.js                Cliente HTTP (roteamento via /proxy e descompactação de streams gzip)

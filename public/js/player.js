@@ -56,7 +56,7 @@ export function initPlayer() {
   const replay = (it) => play(it, { ...P.ctx, mode: P.mode === 'full' ? 'full' : 'preview', mount: P.home, exact: true });
   el.bQuality = btn('quality', 'Qualidade', () => pickQuality(engine, P.item, replay));
   el.bSpeed = btn('speed', 'Velocidade', async () => {
-    const r = await pickSpeed(P.rate);
+    const r = await pickSpeed(P.rate, engine.speeds);
     if (r === undefined) return;
     P.rate = r;
     media.playbackRate = r;
