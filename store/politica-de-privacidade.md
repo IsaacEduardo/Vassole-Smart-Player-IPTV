@@ -1,6 +1,6 @@
 # Política de privacidade — Vassole Smart Player IPTV
 
-*Última atualização: [DATA DA PUBLICAÇÃO]*
+*Última atualização: 10 de novembro de 2026*
 
 O Vassole Smart Player IPTV ("o app") é um reprodutor de mídia. Esta política explica que dados o app usa e onde eles ficam.
 
@@ -43,13 +43,13 @@ Mudanças nesta política serão publicadas nesta página, com nova data de atua
 
 ## Contato
 
-[NOME DO DESENVOLVEDOR OU EMPRESA] — [E-MAIL DE CONTATO]
+Isaac Hossi — isaachossied@gmail.com
 
 ---
 
 # Privacy policy — Vassole Smart Player IPTV
 
-*Last updated: [PUBLICATION DATE]*
+*Last updated: November 10, 2026*
 
 Vassole Smart Player IPTV ("the app") is a media player. This policy explains what data the app uses and where it is kept.
 
@@ -65,4 +65,4 @@ Vassole Smart Player IPTV ("the app") is a media player. This policy explains wh
 
 **Changes:** updates to this policy will be published on this page with a new date.
 
-**Contact:** [DEVELOPER OR COMPANY NAME] — [CONTACT E-MAIL]
+**Contact:** Isaac Hossi — isaachossied@gmail.com

@@ -5,6 +5,7 @@ node_modules/
 # capturas do teste E2E (python3 test/e2e.py [pasta])
 shots/
 capturas/
+!store/capturas/
 __pycache__/
 # configuração local do Claude Code
 .claude/
