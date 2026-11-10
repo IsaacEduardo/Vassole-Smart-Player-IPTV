@@ -1,6 +1,6 @@
 {
   "name": "vassole-smart-player-iptv",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Vassole Smart Player IPTV: player de IPTV para listas M3U e contas Xtream Codes, sem ativação.",
   "type": "module",
   "private": true,

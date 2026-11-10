@@ -108,6 +108,11 @@ try {
   assert.equal(info.type, 'web');
   assert.equal(info.main, 'index.html');
   assert.equal(info.disableBackHistoryAPI, true, 'appinfo.json: Voltar (461) chega ao app');
+  // Versão única: package.json. Servidor e modelo do webOS não guardam outra.
+  const { VERSION } = await import('../lib/app.mjs');
+  assert.equal(VERSION, pkg.version, 'servidor usa a versão do package.json');
+  assert.ok(!('version' in JSON.parse(readFileSync(new URL('../webos/appinfo.json', import.meta.url), 'utf8'))), 'webos/appinfo.json sem versão fixa');
+  assert.ok(readFileSync(join(out, 'browser', 'js', 'app.js'), 'utf8').includes(`window.__VERSION__="${pkg.version}"`), 'bundle com a versão');
   const pngSize = (file) => { const b = readFileSync(join(wo, file)); return [b.readUInt32BE(16), b.readUInt32BE(20)]; };
   assert.deepEqual(pngSize(info.icon), [80, 80], 'ícone 80×80');
   assert.deepEqual(pngSize(info.largeIcon), [130, 130], 'ícone grande 130×130');

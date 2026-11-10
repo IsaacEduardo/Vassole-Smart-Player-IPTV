@@ -51,6 +51,7 @@ export async function detectProxy() {
     const r = await fetch('/api/health', { cache: 'no-store' });
     const j = await r.json();
     S.proxyAvailable = !!j.proxy;
+    if (j.version) S.appVersion = j.version;
   } catch { S.proxyAvailable = false; }
   computeNet();
 }

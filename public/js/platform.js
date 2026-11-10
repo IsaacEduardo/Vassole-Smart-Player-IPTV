@@ -47,6 +47,8 @@ export function capsFor(platform, bundled) {
 const W = typeof window !== 'undefined' ? window : {};
 export const PLATFORM = detectPlatform(W);
 export const BUNDLED = !!W.__BUNDLED__;
+// Versão do app: gravada pelo build nos pacotes; no navegador vem do server.mjs (/api/health).
+export const BUILD_VERSION = W.__VERSION__ || '';
 export const caps = capsFor(PLATFORM, BUNDLED);
 export const isNative = PLATFORM !== 'browser';
 

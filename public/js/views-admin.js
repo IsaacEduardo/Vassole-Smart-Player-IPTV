@@ -9,7 +9,7 @@ import { focusFirst } from './nav.js';
 import * as db from './db.js';
 import { add } from './views-common.js';
 import { applyCueStyle } from './subs.js';
-import { caps, PLATFORM } from './platform.js';
+import { caps, PLATFORM, BUILD_VERSION } from './platform.js';
 
 const PLATFORM_NAMES = { android: 'Android', tizen: 'Samsung (Tizen)', webos: 'LG (webOS)', browser: 'Navegador' };
 import { LANGS, langName } from './lang.js';
@@ -353,7 +353,8 @@ export async function viewSettings(root) {
         location.hash = '#/home'; location.reload();
       } }, 'Apagar'))),
     section('Sobre',
-      h('p', { class: 'muted small' }, 'Vassole Smart Player IPTV 1.0 · player de IPTV de código próprio, gratuito e sem ativação. Reproduz listas M3U e contas Xtream Codes informadas pelo usuário. Não inclui, vende nem indica canais ou conteúdo; o usuário é responsável por ter direito de acesso às fontes que cadastrar.'),
+      h('p', { class: 'muted small' }, `Vassole Smart Player IPTV ${BUILD_VERSION || S.appVersion || ''}`.trim() + ' · player de IPTV de código próprio, gratuito e sem ativação. Reproduz listas M3U e contas Xtream Codes informadas pelo usuário. Não inclui, vende nem indica canais ou conteúdo; o usuário é responsável por ter direito de acesso às fontes que cadastrar.'),
+      h('p', { class: 'muted small' }, 'Privacidade: playlists, favoritos, histórico e ajustes ficam só neste aparelho. O app não tem contas, não coleta dados e não envia nada a terceiros; só acessa os endereços que você cadastrar.'),
       h('p', { class: 'muted small' }, 'Bibliotecas: hls.js e mpegts.js (Apache-2.0).')),
   );
   computeNet();

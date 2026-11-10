@@ -1,7 +1,7 @@
 // Service worker: guarda apenas os arquivos do app para abrir sem rede.
 // Nunca armazena streams, playlists, guias ou respostas do proxy.
 // <gerado por scripts/build-sw.mjs: não editar à mão>
-const VERSION = 'sintonia-1.0.0-e27c0cd386';
+const VERSION = 'sintonia-1.1.0-2868c9c79e';
 const SHELL = [
   './', 'fonts/ah-latin-400.woff2', 'fonts/ah-latin-700.woff2', 'fonts/ah-latin-ext-400.woff2',
   'fonts/ah-latin-ext-700.woff2', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon.svg',

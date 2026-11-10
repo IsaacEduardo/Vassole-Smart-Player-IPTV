@@ -1,6 +1,6 @@
 # Vassole Smart Player IPTV
 
-Player web de IPTV próprio, gratuito, leve e sem necessidade de ativação. Reproduz listas **M3U/M3U8** e contas **Xtream Codes** cadastradas pelo utilizador, com suporte a navegação espacial para controlo remoto (Smart TVs, TV Box) e rato/teclado.
+Player de IPTV próprio, gratuito, leve e sem necessidade de ativação, para navegador, Android, Android TV, TVs Samsung e TVs LG (versão 1.1.0; mudanças em [CHANGELOG.md](CHANGELOG.md)). Reproduz listas **M3U/M3U8** e contas **Xtream Codes** cadastradas pelo utilizador, com suporte a navegação espacial para controlo remoto (Smart TVs, TV Box) e rato/teclado.
 
 > **Nota:** A aplicação é exclusivamente um reprodutor de mídia. Não inclui, fornece, vende nem indica canais, listas ou conteúdos. Código escrito do zero, sem dependências externas no servidor.
 
@@ -196,6 +196,16 @@ Para depurar com o código legível, gere antes com `node scripts/build.mjs webo
 
 **Publicação na LG Content Store (Seller Lounge):** precisa de conta de vendedor (pessoa ou empresa) em [seller.lgappstv.com](https://seller.lgappstv.com), ícones 80×80 e 130×130, imagem de destaque, capturas de ecrã de 1920×1080 e a política de privacidade. Como na Samsung, a descrição deve deixar claro que o app não inclui canais nem conteúdo.
 
+### Publicação nas lojas
+
+A pasta [`store/`](store/) reúne o que as três lojas pedem:
+
+- [`textos-pt-BR.md`](store/textos-pt-BR.md) e [`texts-en.md`](store/texts-en.md): nome, descrições curta e completa, categoria, palavras-chave e novidades da versão;
+- [`recursos-graficos.md`](store/recursos-graficos.md): ícones e capturas exigidos por loja, com tamanhos e o que já existe no projeto;
+- [`politica-de-privacidade.md`](store/politica-de-privacidade.md) (pt-BR e en): preencha nome e e-mail de contato e publique-a num endereço público (o link do ficheiro no GitHub serve).
+
+A versão de todos os pacotes vem do `package.json`. Para lançar uma nova: `npm version <x.y.z> --no-git-tag-version`, `npm run build:sw`, `npm test`, registe as mudanças no `CHANGELOG.md` e gere os pacotes (`android:release`, `tizen:package`, `webos:package`).
+
 ---
 
 ## Testes e desenvolvimento
@@ -244,6 +254,8 @@ scripts/
 android/                  Projeto Capacitor (APK/AAB): NativeProxy.java, HlsRewriter.java, NativePlayerPlugin.java (ExoPlayer), MainActivity.java
 capacitor.config.json     Configuração do Capacitor (identificador, pasta web)
 webos/                    appinfo.json e imagens do app LG (ícones 80/130 e splash 1920×1080)
+store/                    Textos das lojas (pt-BR/en), imagens exigidas e política de privacidade
+CHANGELOG.md              Histórico de versões
 lib/
   app.mjs                 Servidor estático, endpoint /api/health e proxy com reescrita HLS
   netguard.mjs            Segurança do proxy (validação de origem/Host e bloqueio de IPs privados/SSRF)

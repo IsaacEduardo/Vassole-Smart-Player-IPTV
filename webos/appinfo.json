@@ -1,6 +1,5 @@
 {
   "id": "com.vassole.smartplayer",
-  "version": "1.0.0",
   "vendor": "Vassole",
   "type": "web",
   "main": "index.html",
