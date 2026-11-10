@@ -375,6 +375,9 @@ export function onKey(k) {
   if (k === 'back') { if (osdOn && !media.paused) hideOsd(); else close(); return true; }
   if (k === 'playpause') { togglePlay(); showOsd(false); return true; }
   if (k === 'chup' || k === 'chdown') { zap(k === 'chup' ? -1 : 1); return true; }
+  // Teclas de mídia do controlo (LG, Samsung, Android TV): Parar fecha; ⏩/⏪ avançam ou voltam 30 s.
+  if (k === 'stop') { close(); return true; }
+  if ((k === 'forward' || k === 'rewind') && !P.live) { seek(k === 'rewind' ? -30 : 30); showOsd(false); return true; }
   if (/^\d$/.test(k) && P.live) { numInput(k); return true; }
   if (!osdOn) {
     if ((k === 'up' || k === 'down') && P.live && P.ctx.list) { zap(k === 'up' ? -1 : 1); return true; }

@@ -4,7 +4,9 @@
   "description": "Vassole Smart Player IPTV: player de IPTV para listas M3U e contas Xtream Codes, sem ativação.",
   "type": "module",
   "private": true,
-  "engines": { "node": ">=18" },
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "start": "node server.mjs",
     "start:lan": "node server.mjs --host 0.0.0.0",
@@ -19,7 +21,11 @@
     "android:release": "npm run android:sync && cd android && gradlew bundleRelease assembleRelease",
     "tizen:package": "node scripts/tizen.mjs package",
     "tizen:install": "node scripts/tizen.mjs install",
-    "tizen:run": "node scripts/tizen.mjs run"
+    "tizen:run": "node scripts/tizen.mjs run",
+    "webos:package": "node scripts/webos.mjs package",
+    "webos:install": "node scripts/webos.mjs install",
+    "webos:run": "node scripts/webos.mjs run",
+    "webos:inspect": "node scripts/webos.mjs inspect"
   },
   "devDependencies": {
     "@capacitor/android": "8.6.0",

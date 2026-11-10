@@ -1,0 +1,16 @@
+{
+  "id": "com.vassole.smartplayer",
+  "version": "1.0.0",
+  "vendor": "Vassole",
+  "type": "web",
+  "main": "index.html",
+  "title": "Vassole Smart Player IPTV",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "splashBackground": "splash.png",
+  "bgColor": "#0f1c21",
+  "iconColor": "#0f1c21",
+  "resolution": "1920x1080",
+  "disableBackHistoryAPI": true,
+  "transparent": false
+}

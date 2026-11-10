@@ -56,6 +56,13 @@ export function tizenConfig(info) {
 `;
 }
 
+// Manifesto do app LG (webOS 4+): webos/appinfo.json com a versão do package.json.
+export const WEBOS_ID = 'com.vassole.smartplayer';
+export function webosAppinfo(info) {
+  const base = JSON.parse(readFileSync(join(ROOT, 'webos', 'appinfo.json'), 'utf8'));
+  return { ...base, id: WEBOS_ID, version: info.version };
+}
+
 export async function buildPlatform(platform, { outRoot = join(ROOT, 'dist'), minify = true } = {}) {
   const out = join(outRoot, platform);
   rmSync(out, { recursive: true, force: true });
@@ -102,6 +109,10 @@ export async function buildPlatform(platform, { outRoot = join(ROOT, 'dist'), mi
   if (platform === 'tizen') {
     writeFileSync(join(out, 'config.xml'), tizenConfig(pkg));
     cpSync(join(PUB, 'icons', 'icon-512.png'), join(out, 'icon.png'));
+  }
+  if (platform === 'webos') {
+    writeFileSync(join(out, 'appinfo.json'), JSON.stringify(webosAppinfo(pkg), null, 2));
+    for (const f of ['icon.png', 'largeIcon.png', 'splash.png']) cpSync(join(ROOT, 'webos', f), join(out, f));
   }
   writeFileSync(join(out, 'build.json'), JSON.stringify({ app: pkg.name, version: pkg.version, platform, target: TARGET, built: new Date().toISOString() }, null, 2));
   return out;

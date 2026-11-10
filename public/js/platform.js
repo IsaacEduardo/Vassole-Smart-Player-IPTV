@@ -3,7 +3,7 @@
 // tizen (Samsung) e webos (LG).
 //
 // Contrato do motor de reprodução (createEngine). Os motores nativos das próximas fases
-// (ExoPlayer, AVPlay, <video> do webOS) seguem a mesma interface:
+// (ExoPlayer, AVPlay) seguem a mesma interface:
 //   engine.media            objeto com a interface de HTMLMediaElement usada pelo player:
 //                           currentTime, duration, paused, playbackRate, error, play(), pause(),
 //                           addEventListener('playing'|'pause'|'waiting'|'canplay'|'timeupdate'|
@@ -119,7 +119,8 @@ export function onBackButton(fn) {
 }
 
 // Motor de reprodução da plataforma. Android: ExoPlayer (plugin NativePlayer do APK); Samsung: AVPlay;
-// salvo se o ajuste pedir o motor web. Demais: motor web (hls.js, mpegts.js e <video>).
+// LG: motor web com o HLS no <video> da TV (decodificador da TV), MPEG-TS pelo mpegts.js; salvo se o
+// ajuste pedir o motor web puro. Navegador: motor web (hls.js, mpegts.js e <video>).
 export const hasNativePlayer = () => !!((PLATFORM === 'android' && W.Capacitor && W.Capacitor.Plugins && W.Capacitor.Plugins.NativePlayer)
   || (PLATFORM === 'tizen' && W.webapis && W.webapis.avplay));
 
@@ -128,5 +129,5 @@ export function createEngine(video, callbacks, { prefer = 'native' } = {}) {
     if (PLATFORM === 'tizen') return createTizenEngine(video, callbacks, W.webapis.avplay);
     return createAndroidEngine(video, callbacks, W.Capacitor.Plugins.NativePlayer);
   }
-  return createWebEngine(video, callbacks);
+  return createWebEngine(video, callbacks, { nativeHls: PLATFORM === 'webos' && prefer !== 'web', pauseHidden: PLATFORM === 'webos' });
 }

@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import * as esbuild from 'esbuild';
-import { buildPlatform, TARGET, lowerInset, TIZEN_PACKAGE, tizenConfig } from '../scripts/build.mjs';
+import { buildPlatform, TARGET, lowerInset, TIZEN_PACKAGE, tizenConfig, WEBOS_ID } from '../scripts/build.mjs';
 
 // ---- inset → top/right/bottom/left ----
 assert.equal(lowerInset('.a { inset: 0; }'), '.a { top:0;right:0;bottom:0;left:0; }');
@@ -34,6 +34,9 @@ assert.equal(k({ keyCode: 461 }), 'back', 'Voltar LG');
 assert.equal(k({ keyCode: 10252 }), 'playpause');
 assert.equal(k({ keyCode: 427 }), 'chup');
 assert.equal(k({ keyCode: 403 }), 'red');
+// Controlo LG: coloridas 403–406 e mídia (Play 415, Pause 19, Stop 413, Avançar 417, Recuar 412).
+assert.deepEqual([404, 405, 406].map((c) => k({ keyCode: c })), ['green', 'yellow', 'blue']);
+assert.deepEqual([415, 19, 413, 417, 412].map((c) => k({ keyCode: c })), ['playpause', 'playpause', 'stop', 'forward', 'rewind']);
 assert.equal(k({ key: 'ArrowLeft' }), 'left');
 assert.equal(k({ key: 'MediaPlayPause' }), 'playpause');
 assert.equal(k({ key: 'ChannelDown' }), 'chdown');
@@ -61,7 +64,7 @@ try {
   assert.ok(['const a = b?.c;', 'x = y ?? 1', 'const o = { ...p }'].every((c) => modernHits(c).length), 'o detector acha sintaxe nova');
   assert.ok(fitsTarget('const s = "a?.b ?? c"; const f = (...a) => [...a]; const t = a?.5:1;'), 'o detector ignora textos, rest e ternário com número');
   assert.equal(TARGET[0], 'chrome56');
-  for (const platform of ['browser', 'tizen']) {
+  for (const platform of ['browser', 'tizen', 'webos']) {
     const dir = await buildPlatform(platform, { outRoot: out });
     const app = readFileSync(join(dir, 'js', 'app.js'), 'utf8');
     const worker = readFileSync(join(dir, 'js', 'sync-worker.js'), 'utf8');
@@ -95,6 +98,22 @@ try {
   assert.ok(!readFileSync(join(out, 'browser', 'index.html'), 'utf8').includes('webapis'), 'navegador sem webapis.js');
   assert.ok(!existsSync(join(out, 'browser', 'config.xml')), 'navegador sem config.xml');
   assert.equal(tizenConfig({ version: '1.2.3' }).match(/version="1\.2\.3"/g).length, 1);
+
+  // Pacote LG: appinfo.json, ícones nos tamanhos pedidos pela LG e Voltar entregue ao app.
+  const wo = join(out, 'webos');
+  const info = JSON.parse(readFileSync(join(wo, 'appinfo.json'), 'utf8'));
+  assert.equal(info.id, WEBOS_ID);
+  assert.equal(info.version, pkg.version, 'appinfo.json: versão do package.json');
+  assert.ok(/^\d+\.\d+\.\d+$/.test(info.version), 'appinfo.json: versão x.y.z');
+  assert.equal(info.type, 'web');
+  assert.equal(info.main, 'index.html');
+  assert.equal(info.disableBackHistoryAPI, true, 'appinfo.json: Voltar (461) chega ao app');
+  const pngSize = (file) => { const b = readFileSync(join(wo, file)); return [b.readUInt32BE(16), b.readUInt32BE(20)]; };
+  assert.deepEqual(pngSize(info.icon), [80, 80], 'ícone 80×80');
+  assert.deepEqual(pngSize(info.largeIcon), [130, 130], 'ícone grande 130×130');
+  assert.deepEqual(pngSize(info.splashBackground), [1920, 1080], 'splash 1920×1080');
+  assert.ok(!readFileSync(join(wo, 'index.html'), 'utf8').includes('webapis'), 'LG sem webapis.js');
+  assert.ok(!existsSync(join(tz, 'appinfo.json')), 'Samsung sem appinfo.json');
 
   // As bibliotecas copiadas sem conversão também precisam rodar no Chromium 56.
   for (const f of ['hls.min.js', 'mpegts.js']) {

@@ -106,7 +106,7 @@ Cada plataforma é gerada em `dist/<plataforma>/`:
 
 Para testar a saída no computador: `node server.mjs --root dist/browser --port 8081 --allow-private`.
 
-A camada `public/js/platform.js` deteta a plataforma (navegador, Android, Tizen, webOS), define o que cada uma permite (proxy, Web Worker, sair com Voltar), traduz as teclas do controlo remoto (incluindo o registo das teclas de mídia, números e coloridas na Samsung) e cria o motor de reprodução: no navegador, o motor web (`engine-web.js`: hls.js, mpegts.js e `<video>`); no Android, o ExoPlayer (`engine-android.js`); nas TVs Samsung, o AVPlay (`engine-tizen.js`). Os dois motores nativos partilham `engine-native.js` (estado da reprodução no formato do `<video>` e posição do vídeo atrás da página). O pacote LG (`.ipk`) é a próxima etapa.
+A camada `public/js/platform.js` deteta a plataforma (navegador, Android, Tizen, webOS), define o que cada uma permite (proxy, Web Worker, sair com Voltar), traduz as teclas do controlo remoto (incluindo o registo das teclas de mídia, números e coloridas na Samsung) e cria o motor de reprodução: no navegador, o motor web (`engine-web.js`: hls.js, mpegts.js e `<video>`); no Android, o ExoPlayer (`engine-android.js`); nas TVs Samsung, o AVPlay (`engine-tizen.js`). Os dois motores nativos partilham `engine-native.js` (estado da reprodução no formato do `<video>` e posição do vídeo atrás da página). Nas TVs LG, o motor web entrega o HLS diretamente ao `<video>` da TV (sem hls.js) e usa o mpegts.js para MPEG-TS.
 
 ### Android, Android TV, Google TV e Fire TV
 
@@ -165,6 +165,37 @@ TIZEN_PROFILE=vassole TIZEN_TV=192.168.1.50 npm run tizen:run   # instala e abre
 
 **Publicação na Samsung Apps (Seller Office):** precisa de conta de vendedor Samsung, certificado de distribuidor do tipo *Public* (no Certificate Manager), ícone de 512×423 px, capturas de ecrã de 1920×1080 e a política de privacidade. A Samsung revê apps de IPTV com atenção: a descrição deve deixar claro que o app não inclui canais nem conteúdo.
 
+### LG (webOS)
+
+Pacote `.ipk` para TVs LG com webOS 4.0 ou superior (modelos de 2018 em diante). A pasta `webos/` guarda o `appinfo.json` (identificador `com.vassole.smartplayer`) e as imagens: `icon.png` (80×80), `largeIcon.png` (130×130) e `splash.png` (1920×1080). O build (`node scripts/build.mjs webos`) copia-as para `dist/webos/` e grava no `appinfo.json` a versão do `package.json`. O `appinfo.json` usa `disableBackHistoryAPI`, para que a tecla Voltar (461) chegue ao app; Voltar no Início pergunta se deseja sair.
+
+**Reprodução:** o HLS vai diretamente ao `<video>` da TV, que usa o decodificador de hardware (HEVC, AC-3 conforme o modelo), sem hls.js. Se a TV recusar um stream, esse endereço passa a tocar pelo hls.js durante a sessão. MPEG-TS toca pelo mpegts.js e MP4/MKV pelo `<video>`. Ao sair do app (botão Home ou outra entrada), a reprodução pausa: ao voltar, o filme continua e o canal ao vivo é recarregado. Em **Ajustes › Reprodução › Player de vídeo › Web**, todo o HLS passa pelo hls.js (escolha de qualidade manual).
+
+**Controlo remoto:** setas, OK, Voltar (461), números, CH+/CH−, teclas coloridas (403–406) e de mídia: Play/Pause (415/19), Parar (413, fecha o player), ⏩/⏪ (417/412, ±30 s). O ponteiro do Magic Remote funciona como rato.
+
+Limitações: sem `User-Agent`/`Referer` por canal (como na Samsung sem o AVPlay, o pedido sai do próprio player da TV); legendas embutidas em MKV/MP4 dependem do modelo.
+
+**Requisitos (uma única vez):**
+
+1. Instale a CLI do webOS (Node 18+): `npm install -g @webos-tools/cli`. Confirme com `ares --version`.
+2. Crie uma conta em [webostv.developer.lge.com](https://webostv.developer.lge.com) (a mesma conta LG da TV serve).
+3. **Developer Mode na TV:** na LG Content Store, instale o app **Developer Mode**, entre com a conta LG, ligue *Dev Mode Status* (a TV reinicia) e depois ligue *Key Server*. Anote o IP e a *Passphrase* mostrados no app. O modo dura 50 horas; use *Extend Session* no app para renovar.
+4. **Cadastrar a TV no PC:** `ares-setup-device` → *add* → nome `tv`, IP da TV, porta `9922`, utilizador `prisoner`, sem senha. Depois busque a chave: `ares-novacom --device tv --getkey` e informe a *Passphrase*. Teste com `ares-device --device tv --system-info`.
+
+**Empacotar, instalar e depurar:**
+
+```bash
+npm run webos:package     # gera dist/com.vassole.smartplayer_<versão>_all.ipk
+npm run webos:install     # empacota e instala na TV "tv"
+npm run webos:run         # instala e abre o app
+npm run webos:inspect     # abre o Web Inspector do app (com o app aberto na TV)
+# Outra TV cadastrada: WEBOS_DEVICE=sala npm run webos:run   (PowerShell: $env:WEBOS_DEVICE="sala"; npm run webos:run)
+```
+
+Para depurar com o código legível, gere antes com `node scripts/build.mjs webos --dev` e empacote com `ares-package --no-minify -o dist dist/webos`.
+
+**Publicação na LG Content Store (Seller Lounge):** precisa de conta de vendedor (pessoa ou empresa) em [seller.lgappstv.com](https://seller.lgappstv.com), ícones 80×80 e 130×130, imagem de destaque, capturas de ecrã de 1920×1080 e a política de privacidade. Como na Samsung, a descrição deve deixar claro que o app não inclui canais nem conteúdo.
+
 ---
 
 ## Testes e desenvolvimento
@@ -209,8 +240,10 @@ scripts/
   build-sw.mjs            Gera a lista de ficheiros (SHELL) e o hash de versão do Service Worker
   build.mjs               Gera dist/<plataforma>/ (esbuild, alvo Chromium 56) e o config.xml da Samsung
   tizen.mjs               Empacota (.wgt), instala e abre o app na TV Samsung (CLI do Tizen Studio)
+  webos.mjs               Empacota (.ipk), instala, abre e inspeciona o app na TV LG (CLI ares)
 android/                  Projeto Capacitor (APK/AAB): NativeProxy.java, HlsRewriter.java, NativePlayerPlugin.java (ExoPlayer), MainActivity.java
 capacitor.config.json     Configuração do Capacitor (identificador, pasta web)
+webos/                    appinfo.json e imagens do app LG (ícones 80/130 e splash 1920×1080)
 lib/
   app.mjs                 Servidor estático, endpoint /api/health e proxy com reescrita HLS
   netguard.mjs            Segurança do proxy (validação de origem/Host e bloqueio de IPs privados/SSRF)

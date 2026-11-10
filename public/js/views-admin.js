@@ -284,7 +284,7 @@ export async function viewSettings(root) {
       row('Formato ao vivo (Xtream)', 'HLS (.m3u8) ou MPEG-TS (.ts). Automático usa o que a conta permite, com preferência por HLS.', segmented([
         { value: 'auto', label: 'Automático' }, { value: 'hls', label: 'HLS' }, { value: 'ts', label: 'MPEG-TS' },
       ], st.liveFormat, (v) => setSetting('liveFormat', v))),
-      PLATFORM === 'android' || PLATFORM === 'tizen' ? row('Player de vídeo', (PLATFORM === 'tizen' ? 'Nativo (AVPlay da Samsung)' : 'Nativo (ExoPlayer)') + ' decodifica HEVC/H.265 e AC-3 por hardware e mostra legendas embutidas em MKV/MP4. Use o web se algum canal não abrir no nativo. Vale ao reabrir o app.', segmented([
+      PLATFORM !== 'browser' ? row('Player de vídeo', ({ tizen: 'Nativo (AVPlay da Samsung)', webos: 'Nativo (player da TV LG, para HLS)' }[PLATFORM] || 'Nativo (ExoPlayer)') + ' decodifica HEVC/H.265 e AC-3 por hardware' + (PLATFORM === 'webos' ? '' : ' e mostra legendas embutidas em MKV/MP4') + '. Use o web se algum canal não abrir no nativo. Vale ao reabrir o app.', segmented([
         { value: 'native', label: 'Nativo' }, { value: 'web', label: 'Web' },
       ], st.androidPlayer || 'native', (v) => { setSetting('androidPlayer', v); toast('Reabra o app para trocar o player'); })) : null,
       row('Canais em várias qualidades', 'Quando o mesmo canal existe em SD, HD, FHD ou 4K, por qual começar. Se a versão falhar, as outras são tentadas.', segmented([

@@ -1,4 +1,6 @@
 // Motor de reprodução web: HLS (hls.js), MPEG-TS (mpegts.js) e <video> nativo (MP4/WebM/MKV).
+// Com { nativeHls: true } (TVs LG), o HLS vai direto ao <video>, que usa o decodificador da TV
+// (HEVC, AC-3); se a TV recusar o stream, aquele endereço passa a tocar pelo hls.js.
 // Segue o contrato descrito em platform.js. As tentativas de recuperação ficam aqui; o player
 // só recebe a falha definitiva (onError) ou o pedido de recarregar o item (onReload).
 import { toNet } from './net.js';
@@ -44,8 +46,15 @@ export async function pickKind(url, isLive, net) {
 
 const call = (fn, ...a) => { if (typeof fn === 'function') fn(...a); };
 
-export function createWebEngine(video, cb = {}) {
+// Endereços HLS que o <video> da TV recusou: passam a usar o hls.js nesta sessão.
+const hlsJsOnly = new Set();
+
+// pauseHidden (TVs LG): pausa quando o app vai para segundo plano; ao voltar, o VOD continua e o
+// ao vivo é recarregado (para voltar ao ponto atual da transmissão).
+export function createWebEngine(video, cb = {}, { nativeHls = false, pauseHidden = false } = {}) {
   let hls = null;
+  let hlsNative = false; // HLS tocando direto no <video> (player da TV)
+  let current = null;    // último load(): { url, opts }
   let mts = null;
   let kind = '';      // 'hls' | 'mpegts' | 'native' | '' (parado)
   let token = 0;
@@ -54,9 +63,23 @@ export function createWebEngine(video, cb = {}) {
   const external = new WeakSet(); // legendas externas (<track> do app), fora da lista do stream
 
   video.addEventListener('playing', () => { retry = 0; });
+  let resumeOnShow = false;
+  if (pauseHidden) {
+    document.addEventListener('visibilitychange', () => {
+      if (!kind) return;
+      if (document.hidden) {
+        resumeOnShow = !video.paused;
+        if (resumeOnShow) video.pause();
+      } else if (resumeOnShow) {
+        resumeOnShow = false;
+        if (live) call(cb.onReload); else tryPlay();
+      }
+    });
+  }
   video.addEventListener('error', () => {
     if (kind !== 'native') return;
     const c = video.error && video.error.code;
+    if (hlsNative) { onNativeHlsError(c); return; }
     call(cb.onError, c === 4 ? 'Formato ou codec não suportado por este navegador.'
       : c === 3 ? 'Erro ao decodificar o vídeo.' : 'Não foi possível carregar o vídeo.');
   });
@@ -102,6 +125,23 @@ export function createWebEngine(video, cb = {}) {
         : `Falha na reprodução (${d.details}).`);
   }
 
+  // HLS no <video> da TV: formato recusado → hls.js; rede → recarrega (2× ao vivo, 1× VOD).
+  function onNativeHlsError(code) {
+    const tk = token;
+    const again = current;
+    if (code === 4 && again && !hlsJsOnly.has(again.url)) {
+      hlsJsOnly.add(again.url);
+      api.load(again.url, { ...again.opts, keepRetry: true });
+      return;
+    }
+    if (retry < (live ? 2 : 1)) {
+      retry++;
+      setTimeout(() => { if (tk === token) call(cb.onReload); }, 1500);
+      return;
+    }
+    call(cb.onError, code === 4 ? 'A TV não reproduz este stream.' : 'O stream não respondeu ou parou de enviar vídeo.');
+  }
+
   function onMtsError(type, detail, tk) {
     if (tk !== token) return;
     if (retry < 2 && live) {
@@ -116,20 +156,25 @@ export function createWebEngine(video, cb = {}) {
   const nativeSubs = () => Array.from(video.textTracks || [])
     .filter((t) => (t.kind === 'subtitles' || t.kind === 'captions') && !external.has(t));
 
-  return {
+  const api = {
     media: video,
     get kind() { return kind; },
 
     async load(url, { live: isLive = false, startAt = 0, net, keepRetry = false } = {}) {
       const tk = ++token;
       teardown();
+      hlsNative = false;
+      current = { url, opts: { live: isLive, startAt, net } };
       live = isLive;
       if (!keepRetry) retry = 0;
       const k = await pickKind(url, isLive, net);
       if (tk !== token) return;
       const src = toNet(url, net);
       try {
-        if (k === 'hls') {
+        if (k === 'hls' && nativeHls && !hlsJsOnly.has(url) && video.canPlayType('application/vnd.apple.mpegurl')) {
+          kind = 'native';
+          hlsNative = true;
+        } else if (k === 'hls') {
           await loadScript('vendor/hls.min.js');
           if (tk !== token) return;
           const Hls = window.Hls;
@@ -209,4 +254,5 @@ export function createWebEngine(video, cb = {}) {
     level() { return hls ? { auto: hls.autoLevelEnabled, current: hls.currentLevel } : { auto: true, current: -1 }; },
     setLevel(i) { if (hls) hls.currentLevel = i; },
   };
+  return api;
 }
