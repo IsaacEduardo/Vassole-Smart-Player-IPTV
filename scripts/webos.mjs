@@ -11,7 +11,7 @@
 //
 // Requer a CLI do webOS: npm install -g @webos-tools/cli  (passo a passo: README, seção "LG (webOS)").
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildPlatform, WEBOS_ID } from './build.mjs';
@@ -60,7 +60,20 @@ process.stdout.write(ares('ares-package', ['--no-minify', '-o', DIST, src]));
 const ipk = join(DIST, `${WEBOS_ID}_${version}_all.ipk`);
 if (!existsSync(ipk)) { console.error(`O pacote não foi gerado: ${ipk}`); process.exit(1); }
 console.log(`Pacote: ${ipk}`);
-if (cmd === 'package') process.exit(0);
+if (cmd === 'package') {
+  // Loja LG: um pacote por resolução gráfica. O de 1920x1080 só é publicado nas TVs UHD; o de
+  // 1280x720 cobre as TVs Full HD. O layout do app é responsivo: só muda o valor declarado.
+  const fhd = join(DIST, 'fhd-1280x720');
+  rmSync(fhd, { recursive: true, force: true });
+  cpSync(src, fhd, { recursive: true });
+  const info = JSON.parse(readFileSync(join(fhd, 'appinfo.json'), 'utf8'));
+  writeFileSync(join(fhd, 'appinfo.json'), JSON.stringify({ ...info, resolution: '1280x720' }, null, 2));
+  const outFhd = join(DIST, 'ipk-1280x720');
+  mkdirSync(outFhd, { recursive: true });
+  process.stdout.write(ares('ares-package', ['--no-minify', '-o', outFhd, fhd]));
+  console.log(`Pacote Full HD: ${join(outFhd, `${WEBOS_ID}_${version}_all.ipk`)}`);
+  process.exit(0);
+}
 
 process.stdout.write(ares('ares-install', ['-d', device, ipk]));
 if (cmd === 'run') process.stdout.write(ares('ares-launch', ['-d', device, WEBOS_ID]));

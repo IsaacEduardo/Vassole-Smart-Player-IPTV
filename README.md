@@ -185,7 +185,7 @@ Limitações: sem `User-Agent`/`Referer` por canal (como na Samsung sem o AVPlay
 **Empacotar, instalar e depurar:**
 
 ```bash
-npm run webos:package     # gera dist/com.vassole.smartplayer_<versão>_all.ipk
+npm run webos:package     # gera os .ipk: dist/ (1920x1080, TVs UHD) e dist/ipk-1280x720/ (TVs Full HD)
 npm run webos:install     # empacota e instala na TV "tv"
 npm run webos:run         # instala e abre o app
 npm run webos:inspect     # abre o Web Inspector do app (com o app aberto na TV)
